@@ -1,5 +1,5 @@
 import { test, assert, assertEqual } from './harness.js'
-import { fetchModel, createSession, MODEL_URLS } from '../shared/models.js'
+import { fetchModel, createSession, validateDownload, MODEL_URLS } from '../shared/models.js'
 test('models: fetch caches', async () => {
   await caches.delete('cv-models-v1')
   const a = await fetchModel(MODEL_URLS[320])
@@ -42,4 +42,12 @@ test('models: auto falls back to wasm without WebGPU', async () => {
   } finally {
     delete navigator.gpu
   }
+})
+test('models: compressed length mismatch is accepted', async () => {
+  const fake = (headers) => ({ headers: new Headers(headers) })
+  const body = new Uint8Array(10600000)
+  validateDownload(fake({ 'content-encoding': 'gzip', 'content-length': '5000000' }), body)
+  let err
+  try { validateDownload(fake({ 'content-length': '12000000' }), body) } catch (e) { err = e }
+  assertEqual(err?.name, 'ModelDownloadError')
 })

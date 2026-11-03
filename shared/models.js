@@ -53,9 +53,10 @@ async function readBody(res, onProgress) {
 }
 
 // Returns an error message if the response/bytes are not a plausible complete model, else null.
-function validate(res, bytes) {
+function problemWith(res, bytes) {
   const total = totalOf(res)
-  if (total && bytes.byteLength !== total) {
+  // With Content-Encoding (gzip/br), Content-Length is the compressed size, so skip the comparison.
+  if (total && bytes.byteLength < total && !res.headers.get('Content-Encoding')) {
     return `truncated body (${bytes.byteLength} of ${total} bytes)`
   }
   if ((res.headers.get('Content-Type') || '').toLowerCase().includes('text/html')) {
@@ -67,6 +68,12 @@ function validate(res, bytes) {
   return null
 }
 
+// Throws ModelDownloadError if the response/bytes are not a plausible complete model.
+export function validateDownload(res, bytes) {
+  const problem = problemWith(res, bytes)
+  if (problem) throw downloadError(`Model download invalid: ${problem}`)
+}
+
 export async function fetchModel(url, onProgress) {
   const href = typeof url === 'string' ? url : url.href
   const cache = await openCache()
@@ -76,7 +83,7 @@ export async function fetchModel(url, onProgress) {
       const hit = await cache.match(href)
       if (hit) {
         const bytes = await readBody(hit.clone(), null)
-        if (!validate(hit, bytes)) {
+        if (!problemWith(hit, bytes)) {
           if (onProgress) onProgress(bytes.byteLength, bytes.byteLength)
           return bytes
         }
@@ -97,7 +104,7 @@ export async function fetchModel(url, onProgress) {
     throw downloadError(`Model download failed (${href}): ${e && e.message}`, e)
   }
 
-  const problem = validate(res, bytes)
+  const problem = problemWith(res, bytes)
   if (problem) throw downloadError(`Model download failed (${href}): ${problem}`)
 
   if (cache) {
