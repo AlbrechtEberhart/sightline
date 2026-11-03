@@ -36,3 +36,12 @@ test('video-source: unsupported codec', async () => {
   let e; try { await assertDecodable({ codec: 'hvc1.bogus', codedWidth: 64, codedHeight: 64 }) } catch (x) { e = x }
   assertEqual(e?.name, 'UnsupportedCodecError')
 })
+test('video-source: audio aligned to video timeline', async () => {
+  const s = await FileVideoSource.open(await fixture('bus-3s.mp4')); const a = await s.readAudio()
+  assert(a.chunks.every((c) => c.timestamp >= 0), 'negative audio timestamp')
+  assert(a.chunks[0].timestamp < 1e6 * 1024 / 44100, `first audio chunk at ${a.chunks[0].timestamp} us`)
+  const total = a.chunks.reduce((sum, c) => sum + c.duration, 0) / 1e6
+  assertClose(total, s.meta.duration, 0.05)
+  const last = a.chunks[a.chunks.length - 1]
+  assertClose((last.timestamp + last.duration) / 1e6, s.meta.duration, 1024 / 44100, 'audio end vs video end')
+})

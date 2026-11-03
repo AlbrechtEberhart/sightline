@@ -20,7 +20,9 @@
 /**
  * @typedef {Object} Frame
  * @property {VideoFrame | ImageBitmap} image  Upright image. The consumer calls close() on it.
- * @property {number} t        Seconds from the start of the source.
+ * @property {number} t        Seconds from the start of the source. For file sources,
+ *   0 is the first presented video frame; FileVideoSource.readAudio() timestamps
+ *   use the same origin (edit lists applied, AAC priming dropped).
  * @property {number} [index]  Frame number in presentation order (file sources only).
  * @property {Motion} [motion] Latest device-motion reading (live sources only).
  */

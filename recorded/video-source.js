@@ -80,6 +80,21 @@ function codecDescription(entry) {
   return new Uint8Array(stream.buffer, 8)
 }
 
+// Seconds to add to a track's media time (cts / timescale) to get movie
+// presentation time, from its edit list: leading empty edits (media_time -1,
+// movie timescale) delay the track; the first real edit's media_time (track
+// timescale) trims its start, e.g. AAC encoder priming. No elst → 0.
+function editOffset(trak, movieTimescale) {
+  const entries = trak.edts?.elst?.entries
+  if (!entries || !entries.length) return 0
+  let empty = 0
+  for (const e of entries) {
+    if (e.media_time === -1) { empty += e.segment_duration / movieTimescale; continue }
+    return empty - e.media_time / trak.mdia.mdhd.timescale
+  }
+  return empty
+}
+
 function toSamples(trak) {
   return trak.samples.map((s, i) => ({
     i,
@@ -163,7 +178,14 @@ export class FileVideoSource {
     }
     this._rotation = rotation
 
-    const at = (info.audioTracks || [])[0]
+    // Movie-timeline time (s) of the first presented video frame: the origin of
+    // video `t` and of readAudio() timestamps.
+    const movieTs = file.moov.mvhd.timescale
+    this._movieTimescale = movieTs
+    this._videoOrigin = frameCount ? this._presOrder[0].cts / ts + editOffset(trak, movieTs) : 0
+
+    // First AAC track only: iPhones may add a non-AAC (spatial audio) track.
+    const at = (info.audioTracks || []).find((t) => String(t.codec).startsWith('mp4a'))
     this._audioTrack = at ? { info: at, trak: file.getTrackById(at.id) } : null
 
     this.meta = {
@@ -277,30 +299,40 @@ export class FileVideoSource {
   }
 
   /**
-   * All AAC samples of the first audio track, for passthrough muxing.
-   * Timestamps are microseconds from the first audio sample.
-   * Resolves null when there is no AAC audio track.
+   * All AAC samples of the first `mp4a` audio track, for passthrough muxing.
+   *
+   * Timestamps are microseconds on the video timeline: 0 is the first
+   * presented video frame (the origin of frame `t`). Both tracks' edit lists
+   * are applied, so AAC encoder priming and empty edits are accounted for.
+   * Chunks that end at or before 0 (priming) are dropped; a chunk that
+   * straddles 0 is kept with its timestamp clamped to 0, so every timestamp
+   * is >= 0. Durations are microseconds.
+   *
+   * Resolves null when there is no AAC track (meta.hasAudio === false).
    */
   async readAudio() {
     const a = this._audioTrack
-    if (!a || !String(a.info.codec).startsWith('mp4a')) return null
+    if (!a) return null
     const entry = a.trak.mdia.minf.stbl.stsd.entries[0]
     const dsi = entry.esds?.esd?.findDescriptor(4)?.findDescriptor(5)
     if (!dsi || !dsi.data) return null
 
     const samples = a.trak.samples.map((s) => ({ offset: s.offset, size: s.size, cts: s.cts, duration: s.duration, timescale: s.timescale }))
-    let t0 = Infinity
-    for (const s of samples) t0 = Math.min(t0, s.cts)
+    // Audio media time → seconds on the video timeline.
+    const shift = editOffset(a.trak, this._movieTimescale) - this._videoOrigin
     const chunks = []
     for (let i = 0; i < samples.length;) {
       const r = rangeFor(samples, i)
       const buf = await readRange(this._blob, r.start, r.end)
       for (let k = 0; k < r.count; k++, i++) {
         const s = samples[i]
+        const start = Math.round((s.cts / s.timescale + shift) * 1e6)
+        const duration = Math.round((s.duration * 1e6) / s.timescale)
+        if (start + duration <= 0) continue // priming / edited-out samples
         chunks.push({
           data: buf.slice(s.offset - r.start, s.offset - r.start + s.size),
-          timestamp: Math.round(((s.cts - t0) * 1e6) / s.timescale),
-          duration: Math.round((s.duration * 1e6) / s.timescale),
+          timestamp: Math.max(0, start),
+          duration,
         })
       }
     }
