@@ -40,6 +40,8 @@ Then open:
 - `http://localhost:8000/live/yolo/` and `http://localhost:8000/recorded/yolo/`: the apps.
 - `http://localhost:8000/tests/`: the browser test page. Add `?grep=<name>` to run only matching tests.
 
+To try the apps on the phone, use the deployed HTTPS URL (see [Deploying to GitHub Pages](#deploying-to-github-pages)). The PC dev server cannot be reached from an iPhone.
+
 The browser tab must stay visible while the tests run, because the video and frame tests need rendering.
 
 The service worker is skipped on localhost unless you add `?sw=1` to the URL.

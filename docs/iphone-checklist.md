@@ -1,6 +1,6 @@
 # iPhone 12 checklist
 
-Manual checks on a real iPhone 12, run after deploying (see [the README](../README.md#deploying-to-github-pages)) or on the local dev server. Tick each item in Safari unless the item says otherwise. The spec's manual checks are in [section 3.6](superpowers/specs/2026-11-03-live-recorded-yolo-design.md#36-testing).
+Manual checks on a real iPhone 12, run against the deployed site at `https://<user>.github.io/<repo>/` (see [the README](../README.md#deploying-to-github-pages)). An iPhone cannot reach the PC's `localhost`, and camera access and the service worker need HTTPS, so the PC dev server is only for the browser tests on the PC. Tick each item in Safari unless the item says otherwise. The spec's manual checks are in [section 3.6](superpowers/specs/2026-11-03-live-recorded-yolo-design.md#36-testing).
 
 ## Install
 
@@ -29,8 +29,12 @@ Manual checks on a real iPhone 12, run after deploying (see [the README](../READ
 
 ## Tests
 
-- [ ] Open `tests/` in Safari on the iPhone. The encoder tests from Tasks 9 and 15 pass.
+Run these in Safari on the iPhone. Keep the browser tab visible while they run, because the encoder tests need rendering.
+
+- [ ] Open `<site>/tests/?grep=encoder` (covers `tests/encoder.test.js`). All encoder tests pass.
+- [ ] Open `<site>/tests/?grep=recorded-yolo` (covers `tests/recorded-yolo.test.js`). All tests pass.
+- [ ] Report any test shown as "skipped" in the notes. Skips are only expected for the H.264 encoder check when the browser cannot encode.
 
 ## Offline
 
-- [ ] After one visit with a connection, turn on airplane mode. Both apps still open and run.
+- [ ] Open each app once, and wait until the model has finished loading (the loading message goes away and detection runs). Then turn on airplane mode. Both apps still open and run. The app shell and the model are cached separately, so both steps are needed.
