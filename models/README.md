@@ -20,7 +20,12 @@ This machine has no Python, so the export runs on Google Colab.
    - `tests/fixtures/bus.jpg`, `bus-3s.mp4`, `bus-3s-noaudio.mp4`, `bus-3s-rot90.mp4`
 4. Check that both `.onnx` files are between 9 MB and 12 MB.
 
-Export settings: Ultralytics 8.3.40, `format='onnx'`, `opset=17`, `simplify=True`, `dynamic=False`, `nms=False`, fp32. Fixed shapes run faster on WebGPU than a dynamic one.
+Export settings: Ultralytics `>=8.3.40,<9` (the notebook installs the newest release in that range, plus `onnx`, `onnxscript`, `onnxslim` and `onnxruntime`), `format='onnx'`, `opset=17`, `simplify=True`, `dynamic=False`, `nms=False`, fp32. Fixed shapes run faster on WebGPU than a dynamic one.
+
+The notebook sets `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` because current Colab torch (2.6+) otherwise refuses to load the Ultralytics checkpoint. It prints the exact `ultralytics` and `torch` versions it used. Those exact versions are recorded here after the run:
+
+- ultralytics: (not yet run)
+- torch: (not yet run)
 
 ## Licence
 
