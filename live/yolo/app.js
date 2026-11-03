@@ -11,7 +11,7 @@ import { Recorder } from './recording.js'
 
 const SETTINGS_KEY = 'live-yolo-settings'
 const DEFAULTS = { conf: 0.35, inputSize: 320, showLabels: true }
-const HINT_AFTER_MS = 3000 // let the fps meter warm up before warning
+const HINT_AFTER_MS = 2000 // let the fps meter warm up before warning
 
 const $ = (id) => document.getElementById(id)
 const el = {
@@ -24,7 +24,15 @@ const ctx = el.canvas.getContext('2d')
 const params = new URLSearchParams(location.search)
 const clipUrl = params.get('source') === 'file' ? params.get('clip') : null
 
-const settings = loadSettings(SETTINGS_KEY, DEFAULTS)
+// Stored settings may be hand-edited or from an older version: coerce each field to a valid value.
+function validSettings(raw) {
+  return {
+    conf: typeof raw.conf === 'number' && Number.isFinite(raw.conf) ? Math.min(0.9, Math.max(0.1, raw.conf)) : DEFAULTS.conf,
+    inputSize: raw.inputSize === 320 || raw.inputSize === 640 ? raw.inputSize : DEFAULTS.inputSize,
+    showLabels: typeof raw.showLabels === 'boolean' ? raw.showLabels : DEFAULTS.showLabels,
+  }
+}
+const settings = validSettings(loadSettings(SETTINGS_KEY, DEFAULTS))
 const stats = window.__liveStats = { framesSeen: 0, framesDetected: 0, lastCount: 0, backend: null, status: '' }
 
 let detector = null
@@ -39,7 +47,11 @@ let meter = createFpsMeter()
 let detectStart = 0
 let chain = Promise.resolve() // serialises start/stop/restart operations
 const recorder = new Recorder()
-let stopping = null // token of the stop-and-encode in flight
+let starting = false // Record tapped, first frame not encoded yet
+let stopping = false // finish() in flight: never abort this, let the clip complete
+let halted = false // a fatal error card is showing: camera or detector is not running
+let pageHidden = false
+let reopenPending = false // the camera should be reopened when the page is visible again
 let blob = null
 let linkUrl = null
 
@@ -56,6 +68,7 @@ function modelFail(err) {
   const body = err.name === 'ModelDownloadError'
     ? 'The model could not be downloaded. Check your connection and tap Retry.'
     : (err.message || String(err))
+  halted = true
   fail('Could not load the model', body, boot)
 }
 function setLoading(text) {
@@ -100,12 +113,17 @@ function watchFramesSeen(video, mine) {
 }
 
 async function openCamera() {
+  if (document.hidden) { reopenPending = true; return } // never ask for the camera while hidden
   clearErrors()
+  halted = false
   const mine = ++epoch
   let src
   try {
     src = await LiveCameraSource.open({ deviceId, debugFile: await debugFile() })
   } catch (err) {
+    if (mine !== epoch) return
+    halted = true
+    updateRec()
     if (err.name === 'CameraPermissionError') {
       return fail('Camera unavailable',
         'Camera access is off. Open Settings → Safari (or Brave) → Camera → Allow, then tap Retry.', openCamera)
@@ -113,12 +131,13 @@ async function openCamera() {
     return fail('Camera unavailable', err.message || String(err), openCamera)
   }
   if (mine !== epoch) { src.stop(); return }
+  reopenPending = false
   source = src
   el.viewport.prepend(src.video)
   meter = createFpsMeter()
   detectStart = 0
   watchFramesSeen(src.video, mine)
-  el.rec.disabled = false
+  updateRec()
   loopDone = detectLoop(src, mine)
   populateLenses(src)
 }
@@ -132,7 +151,9 @@ async function closeCamera() {
   await loopDone
   s?.video.remove()
   lastBoxes = []
-  el.rec.disabled = true
+  stats.lastCount = 0
+  detectStart = 0
+  updateRec()
 }
 
 async function populateLenses(src) {
@@ -174,9 +195,17 @@ async function detectLoop(src, mine) {
     }
   } catch (err) {
     if (stale()) return
+    halted = true
     abortRecording()
     src.stop()
-    fail('Detection stopped', err.message || String(err), async () => { await closeCamera(); await openCamera() })
+    updateRec()
+    // The detector may be what broke (e.g. a lost WebGPU device), so Retry rebuilds everything.
+    fail('Detection stopped', err.message || String(err), async () => {
+      try { detector?.dispose() } catch { /* already broken */ }
+      detector = null
+      await closeCamera()
+      await boot()
+    })
   }
 }
 
@@ -184,11 +213,14 @@ async function detectLoop(src, mine) {
 function refreshStatus() {
   const now = performance.now()
   const fps = meter.fpsAt(now)
-  const text = !source || !detector ? 'Starting…'
-    : stats.framesDetected ? formatStatus({ count: lastBoxes.length, backend: detector.backend, fps })
-    : 'Detecting…'
+  // Only a live session (camera and detector up, this session's first detect done) has a real fps.
+  const live = !halted && source && detector && detectStart > 0
+  const text = halted ? 'Stopped'
+    : !source || !detector ? 'Starting…'
+    : !live ? 'Detecting…'
+    : formatStatus({ count: lastBoxes.length, backend: detector.backend, fps })
   if (text !== stats.status) { stats.status = text; el.status.textContent = text }
-  const hint = stats.framesDetected && now - detectStart > HINT_AFTER_MS ? lowFpsHint(fps, recorder.active) : null
+  const hint = live && now - detectStart > HINT_AFTER_MS ? lowFpsHint(fps, recorder.active) : null
   el.hint.hidden = !hint
   if (hint) el.hint.textContent = hint
 }
@@ -204,7 +236,7 @@ function drawFrame() {
     drawDetections(ctx, lastBoxes, { ...fitCover(srcW, srcH, w, h), showLabels: settings.showLabels, dpr })
   }
   refreshStatus()
-  if (recorder.active) {
+  if (recorder.active && !starting) {
     const s = Math.floor(recorder.elapsed)
     el.rec.textContent = `Stop ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   }
@@ -219,65 +251,83 @@ function clearSaved() {
   el.download.hidden = true
 }
 
-function resetRecButton() {
-  el.rec.classList.remove('active')
-  el.rec.textContent = 'Record'
-  el.rec.disabled = !source
-  stopping = null
+// Record is usable only with a live camera, no fatal error card, and no start/stop in flight.
+function updateRec() {
+  el.rec.disabled = !source || halted || starting || stopping
 }
 
+function resetRecButton() {
+  starting = false
+  stopping = false
+  el.rec.classList.remove('active')
+  el.rec.textContent = 'Record'
+  updateRec()
+}
+
+// Drops the recording (lens switch, hide, error). A recording already finishing is left to complete.
 function abortRecording() {
-  if (!recorder.active && !stopping) return
+  if (stopping || !recorder.active) return
   recorder.abort()
   resetRecButton()
 }
 
 async function recordFrame(image, boxes, t) {
   try {
-    await recorder.addFrame(image, boxes, t, settings.showLabels)
+    const result = await recorder.addFrame(image, boxes, t, settings.showLabels)
+    if (result === 'resized') {
+      finishRecording('Recording stopped: orientation changed') // not awaited: detection keeps running
+    } else if (result === 'ok' && starting) {
+      starting = false
+      el.rec.classList.add('active')
+      updateRec()
+    }
   } catch (err) {
+    if (!recorder.active) return // aborted or stopped meanwhile: not an error
     abortRecording()
     fail('Recording stopped', err.message || String(err), dismiss, 'Dismiss')
   }
 }
 
-async function toggleRecording() {
-  if (stopping || !source) return
-  if (!recorder.active) {
-    clearSaved()
-    try {
-      await recorder.start(source.meta)
-    } catch (err) {
-      return fail('Cannot record', err.message || String(err), dismiss, 'Dismiss')
-    }
-    el.rec.classList.add('active')
-    return
-  }
-  const token = stopping = {}
-  el.rec.disabled = true
+// Stops the recording normally: finish() completes and the Save pill appears.
+async function finishRecording(notice) {
+  if (stopping || !recorder.active || starting) return
+  stopping = true
   el.rec.textContent = 'Saving…'
+  updateRec()
   try {
-    const result = await recorder.stop()
-    if (stopping === token) { blob = result; el.save.hidden = false } // else aborted while encoding
+    blob = await recorder.stop()
+    el.save.hidden = false
+    if (notice) fail(notice, 'The clip recorded so far is ready to save.', dismiss, 'Dismiss')
   } catch (err) {
-    if (stopping === token) fail('Recording failed', err.message || String(err), dismiss, 'Dismiss')
+    fail('Recording failed', err.message || String(err), dismiss, 'Dismiss')
   }
-  if (stopping === token) resetRecButton()
+  resetRecButton()
+}
+
+function toggleRecording() {
+  if (stopping || starting || halted || !source) return
+  if (recorder.active) return finishRecording()
+  clearSaved()
+  // The encoder is created from the first recorded frame's size (see Recorder).
+  recorder.arm(source.meta.fps)
+  starting = true
+  el.rec.textContent = 'Starting…'
+  updateRec()
 }
 
 // Direct click handler: saveFile needs the user gesture, so nothing is awaited before it.
 function onSave() {
   if (!blob) return
+  const saved = blob
   const filename = `sightline-live-${new Date().toISOString().replace(/[:.]/g, '-')}.mp4`
-  const done = saveFile(blob, filename)
-  done.then((result) => {
+  saveFile(saved, filename).then((result) => {
     if (result === 'shared') return
     if (linkUrl) URL.revokeObjectURL(linkUrl)
-    linkUrl = URL.createObjectURL(blob)
+    linkUrl = URL.createObjectURL(saved)
     el.download.href = linkUrl
     el.download.download = filename
     el.download.hidden = false
-  })
+  }).catch((err) => fail('Could not save', err.message || String(err), dismiss, 'Dismiss'))
 }
 
 // ---------- settings ----------
@@ -329,21 +379,25 @@ el.rec.addEventListener('click', toggleRecording)
 el.save.addEventListener('click', onSave)
 
 // ---------- lifecycle ----------
-let hiddenStop = false
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
+  pageHidden = document.hidden
+  if (pageHidden) {
     abortRecording()
-    hiddenStop = !!source
-    if (hiddenStop) serial(closeCamera)
-  } else if (hiddenStop) {
-    hiddenStop = false
-    serial(openCamera)
+    reopenPending = true
+    serial(async () => { if (pageHidden && source) await closeCamera() })
+  } else {
+    // Reopen unless something is already running, a fatal error card is showing, or the model is not ready.
+    serial(async () => {
+      if (document.hidden || source || halted || !detector) return
+      await openCamera()
+    })
   }
 })
 window.addEventListener('pagehide', () => { abortRecording(); source?.stop() })
 
 // The lens list is filled in by openCamera, once permission makes the labels available.
 async function boot() {
+  halted = false
   try { await loadDetector() } catch (err) { return modelFail(err) }
   await openCamera()
 }

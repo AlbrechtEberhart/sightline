@@ -8,3 +8,17 @@ test('live-yolo: debug clip runs detection and status', async () => {
   assert(s.lastCount >= 1, 'bus clip should yield boxes')
   assert(/^\d+ objects? · (WebGPU|WASM) · \d+ fps$/.test(s.status), s.status)
 })
+test('live-yolo: recorder sizes from the first frame and stops on a size change', async () => {
+  const { Recorder } = await import('../live/yolo/recording.js')
+  const frame = (w, h, ts) => { const c = new OffscreenCanvas(w, h); c.getContext('2d').fillRect(0, 0, w, h); return new VideoFrame(c, { timestamp: ts }) }
+  const r = new Recorder(); r.arm(30)
+  const frames = [frame(640, 480, 0), frame(640, 480, 33000), frame(480, 640, 66000)]
+  try {
+    assert(await r.addFrame(frames[0], [], 0, true) === 'ok', 'first frame')
+    assert(r.ready && r.encoder.width === 640 && r.encoder.height === 480, 'sized from the first frame')
+    assert(await r.addFrame(frames[1], [], 0.033, true) === 'ok', 'same size')
+    assert(await r.addFrame(frames[2], [], 0.066, true) === 'resized', 'rotated frame is rejected, not stretched')
+    const blob = await r.stop()
+    assert(blob.type === 'video/mp4' && blob.size > 0, 'clip is finished and non-empty')
+  } finally { frames.forEach(f => f.close()); r.abort() }
+})
