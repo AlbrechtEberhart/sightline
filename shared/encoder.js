@@ -48,6 +48,8 @@ export class Mp4Encoder {
     this.config = config
     this.width = config.width; this.height = config.height
     this.codec = config.codec
+    // Each frame lasts one nominal period: mp4-muxer ends the track at the last sample's timestamp + duration.
+    this.frameDurationUs = Math.round(1e6 / config.framerate)
     this.audio = audio || null
     this.audioMetaSent = false
     this.error = null
@@ -89,7 +91,7 @@ export class Mp4Encoder {
     const keyFrame = t - this.lastKeyT >= KEYFRAME_INTERVAL_S
     if (keyFrame) this.lastKeyT = t
     // Always wrap: a new VideoFrame leaves the caller's frame for the caller to close.
-    const frame = new VideoFrame(image, { timestamp })
+    const frame = new VideoFrame(image, { timestamp, duration: this.frameDurationUs })
     try { this.encoder.encode(frame, { keyFrame }) } finally { frame.close() }
   }
 

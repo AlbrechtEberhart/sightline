@@ -12,7 +12,7 @@ const run = async name => {
 }
 test('recorded-yolo: exportClip keeps frames, duration, audio', async () => {
   const out = await run('bus-3s.mp4')
-  assertEqual([out.meta.frameCount, out.meta.hasAudio], [90, true]); assertClose(out.meta.duration, 3.0, 0.034)
+  assertEqual([out.meta.frameCount, out.meta.hasAudio], [90, true]); assertClose(out.meta.duration, 3.0, 0.005)
 })
 test('recorded-yolo: exportClip without audio', async () => {
   const out = await run('bus-3s-noaudio.mp4'); assertEqual([out.meta.frameCount, out.meta.hasAudio], [90, false])

@@ -201,7 +201,8 @@ async function processRun(prior = null) {
   const n = meta.frameCount
   setBar(el.procBar, (startFrame / n) * 100)
   el.procText.textContent = `${Math.floor((startFrame / n) * 100)}% · ETA —`
-  const current = run = { ac: new AbortController() }
+  const current = run = { ac: new AbortController(), paused: false }
+  if (document.hidden) { current.paused = true; current.ac.abort() } // hidden again before the run started
   wake.acquire()
   const res = await processClip(source, detector, {
     step: settings.step, conf: settings.conf, iou: 0.45, startFrame, prior, signal: current.ac.signal,
@@ -230,7 +231,8 @@ async function processRun(prior = null) {
     if (res.error.name !== 'VideoDecodeError') dropDetector() // the detector may be what broke
     return fail('Processing stopped', message(res.error), [retryAction(() => processRun(res)), chooseAction])
   }
-  if (prior && res.lastFrame === prior.lastFrame) {
+  // A resume that was not interrupted by a hide yet stored nothing will not get further by retrying.
+  if (!current.paused && prior && res.lastFrame === prior.lastFrame) {
     wake.release()
     return fail('Processing stopped', `Processing made no progress after resuming at frame ${startFrame + 1}. ` +
       'Tap Retry to continue.', [retryAction(() => processRun(res)), chooseAction])
@@ -364,7 +366,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     // Stop cleanly before iOS suspends the page (and reclaims the decoder): processing resumes,
     // an export is aborted.
-    run?.ac.abort()
+    if (run) { run.paused = true; run.ac.abort() }
     if (exportRun) { exportRun.hidden = true; exportRun.ac.abort() }
     return
   }

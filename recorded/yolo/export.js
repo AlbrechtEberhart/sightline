@@ -34,11 +34,13 @@ export async function exportClip(blob, detections, { showLabels = true, signal, 
     const ctx = canvas.getContext('2d')
     // capTo1080 keeps the aspect ratio, so one scale maps source pixels to output pixels.
     const scale = canvas.width / meta.width
+    // Stroke and tag sized for the output resolution, as in live/yolo/recording.js.
+    const dpr = Math.max(1, Math.min(canvas.width, canvas.height) / 390)
     for await (const { image, t, index } of source.frames()) {
       try {
         if (signal?.aborted) break
         ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
-        drawDetections(ctx, detections[index] ?? [], { scale, offsetX: 0, offsetY: 0, showLabels, dpr: 1 })
+        drawDetections(ctx, detections[index] ?? [], { scale, offsetX: 0, offsetY: 0, showLabels, dpr })
         await encoder.addFrame(canvas, t)
       } finally {
         image.close()
