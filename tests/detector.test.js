@@ -33,3 +33,8 @@ test('detector: 320 model runs', async () => {
   const det = await createDetector({ modelBytes: await fetchModel(MODEL_URLS[320]), inputSize: 320 })
   assert(Array.isArray(await det.detect(await fixtureImage('bus.jpg')))); det.dispose()
 })
+test('detector: zero-size image throws InvalidImageError', () => {
+  let err; try { preprocess(new OffscreenCanvas(0, 0), 320) } catch (e) { err = e }
+  assertEqual(err?.name, 'InvalidImageError')
+  assertEqual(err?.message, 'image has no size (not loaded yet?)')
+})

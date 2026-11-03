@@ -17,12 +17,26 @@ function createScratch(size) {
   return { size, canvas, ctx, data: new Float32Array(3 * size * size) }
 }
 
+// Intrinsic pixel size of any CanvasImageSource. VideoFrame has displayWidth, video elements
+// videoWidth, <img> naturalWidth; `.width` on those is an attribute / rendered size, not the pixels.
+// Throws InvalidImageError when the size is not a positive finite number (e.g. not loaded yet).
+function sourceSize(image) {
+  const srcW = image.displayWidth ?? image.videoWidth ?? image.naturalWidth ?? image.width
+  const srcH = image.displayHeight ?? image.videoHeight ?? image.naturalHeight ?? image.height
+  if (!(Number.isFinite(srcW) && srcW > 0 && Number.isFinite(srcH) && srcH > 0)) {
+    const e = new Error('image has no size (not loaded yet?)')
+    e.name = 'InvalidImageError'
+    throw e
+  }
+  return { srcW, srcH }
+}
+
 // Draws `image` letterboxed onto a size x size canvas padded with grey and returns
 // RGB, CHW order, float32 scaled 0-1. `scratch` (from createScratch) lets callers reuse buffers;
 // the returned `data` is then the scratch buffer and is overwritten by the next call.
-export function preprocess(image, size, scratch = createScratch(size)) {
-  const srcW = image.displayWidth ?? image.width
-  const srcH = image.displayHeight ?? image.height
+export function preprocess(image, size, scratch) {
+  const { srcW, srcH } = sourceSize(image)
+  scratch ??= createScratch(size)
   const lb = letterbox(srcW, srcH, size)
   const { ctx, data } = scratch
   ctx.fillStyle = PAD_COLOR
@@ -58,26 +72,35 @@ export async function createDetector({ modelBytes, inputSize, backend = 'auto' }
   const inputName = session.inputNames[0]
   const outputName = session.outputNames[0]
   const run = (data) => session.run({ [inputName]: new ort.Tensor('float32', data, [1, 3, inputSize, inputSize]) })
+  // Release every output tensor (matters if the output location is ever a GPU buffer).
+  const disposeAll = (results) => { for (const t of Object.values(results)) t.dispose?.() }
 
   // Warm-up on a blank (grey) input so shader compilation / allocation is not billed to the first frame.
   scratch.data.fill(114 / 255)
   let total = 0
   for (let i = 0; i < WARMUP_RUNS; i++) {
     const t0 = performance.now()
-    await run(scratch.data)
-    total += performance.now() - t0
+    const results = await run(scratch.data)
+    try {
+      total += performance.now() - t0
+    } finally {
+      disposeAll(results)
+    }
   }
   const warmupMs = total / WARMUP_RUNS
 
   // The scratch buffers are shared, so calls are serialized.
   let queue = Promise.resolve()
   async function detectOne(image, opts) {
-    const srcW = image.displayWidth ?? image.width
-    const srcH = image.displayHeight ?? image.height
+    const { srcW, srcH } = sourceSize(image)
     const { data, lb } = preprocess(image, inputSize, scratch)
     const results = await run(data)
-    const output = results[outputName]
-    return postprocess(output.data, output.dims[2], lb, srcW, srcH, opts)
+    try {
+      const output = results[outputName]
+      return postprocess(output.data, output.dims[2], lb, srcW, srcH, opts)
+    } finally {
+      disposeAll(results)
+    }
   }
 
   return {
