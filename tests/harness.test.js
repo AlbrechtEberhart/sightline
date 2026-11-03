@@ -6,3 +6,12 @@ test('harness: assert throws on false', () => {
   assert(threw, 'assert(false) must throw')
 })
 test('harness: skip marks skipped', () => skip('demo'))
+test('harness: assertEqual rejects differences', () => {
+  const rejects = (a, b) => {
+    let threw = false; try { assertEqual(a, b) } catch { threw = true }
+    assert(threw, `assertEqual must throw for ${a} vs ${b}`)
+  }
+  rejects({ a: [1, 2] }, { a: [1, 3] })
+  rejects(new Map([[1, 2]]), new Map([[3, 4]]))
+  rejects(new Date(0), new Date(1))
+})

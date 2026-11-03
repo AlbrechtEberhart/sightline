@@ -22,10 +22,25 @@ function deepEqual(a, b) {
   if (Object.is(a, b)) return true
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
   if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false
-  if (ArrayBuffer.isView(a)) {
+  const tag = Object.prototype.toString.call(a)
+  if (tag === '[object Date]') return Object.is(a.getTime(), b.getTime())
+  if (tag === '[object Map]') {
+    if (a.size !== b.size) return false
+    for (const [k, v] of a) if (!b.has(k) || !deepEqual(v, b.get(k))) return false
+    return true
+  }
+  if (tag === '[object Set]') {
+    if (a.size !== b.size) return false
+    for (const v of a) if (!b.has(v)) return false
+    return true
+  }
+  if (ArrayBuffer.isView(a) && tag !== '[object DataView]') {
     if (a.length !== b.length) return false
     for (let i = 0; i < a.length; i++) if (!Object.is(a[i], b[i])) return false
     return true
+  }
+  if (tag !== '[object Object]' && tag !== '[object Array]') {
+    throw new Error(`assertEqual: unsupported type ${tag}`)
   }
   const ka = Object.keys(a), kb = Object.keys(b)
   if (ka.length !== kb.length) return false
@@ -33,7 +48,8 @@ function deepEqual(a, b) {
 }
 
 function show(v) {
-  try { return JSON.stringify(v) } catch { return String(v) }
+  const replacer = (k, x) => (x instanceof Map ? { Map: [...x] } : x instanceof Set ? { Set: [...x] } : x)
+  try { return JSON.stringify(v, replacer) } catch { return String(v) }
 }
 
 export function assertEqual(actual, expected, msg = '') {
@@ -84,7 +100,14 @@ export async function run({ grep = '', onResult } = {}) {
     if (onResult) onResult(results.results[results.results.length - 1])
   }
 
-  const manifest = (await import('./manifest.js')).default
+  let manifest = []
+  try {
+    manifest = (await import('./manifest.js')).default
+    if (!Array.isArray(manifest)) throw new Error('default export is not an array')
+  } catch (err) {
+    manifest = []
+    record('manifest.js', 'fail', `import error: ${err && err.message ? err.message : err}`)
+  }
   for (const file of manifest) {
     setCurrentFile(file)
     try {
