@@ -60,7 +60,7 @@ export async function processClip(source, detector, opts = {}) {
 
   let lastFrame = startFrame - 1
   let current = null // most recent processed array, reused by skipped frames
-  let done = 0, processed = 0, error
+  let done = 0, processed = 0, warned = false, error
   const began = performance.now()
 
   try {
@@ -84,15 +84,24 @@ export async function processClip(source, detector, opts = {}) {
         const msPerFrame = (performance.now() - began) / processed
         eta = estimateSeconds(Math.ceil((total - done) / step), 1, msPerFrame)
       }
-      if (onProgress) onProgress(done, total, eta)
+      if (onProgress) {
+        try { onProgress(done, total, eta) } catch (e) {
+          if (!warned) { warned = true; console.warn('processClip: onProgress threw', e) }
+        }
+      }
       if (signal?.aborted) break
     }
   } catch (e) {
     error = e // decoder or detector failure: keep what is stored
   } finally {
-    source.stop()
+    try { source.stop() } catch (e) { console.warn('processClip: source.stop threw', e) }
   }
 
+  if (!error && !signal?.aborted && lastFrame < frameCount - 1) {
+    // Decoder ended cleanly early: not a cancel, so the caller must not resume forever.
+    error = new Error(`decoder ended at frame ${lastFrame + 1} of ${frameCount}`)
+    error.name = 'TruncatedClipError'
+  }
   const completed = !error && lastFrame === frameCount - 1
   const result = { detections, times, completed, lastFrame }
   if (error) result.error = error
