@@ -20,7 +20,7 @@ export function codecCandidates(width, height, fps) {
   const mbps = Math.ceil(width / 16) * Math.ceil(height / 16) * fps
   if (mbps <= 245760) return ['avc1.640028', 'avc1.42E028'] // High / Baseline @ 4.0
   if (mbps <= 522240) return ['avc1.64002A', 'avc1.42E02A'] // @ 4.2
-  return ['avc1.640033'] // High @ 5.1
+  return ['avc1.640033', 'avc1.640034', 'avc1.64003C'] // High @ 5.1 / 5.2 / 6.0
 }
 
 function unsupported() {

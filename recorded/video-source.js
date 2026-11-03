@@ -198,6 +198,9 @@ export class FileVideoSource {
       codec: vt.codec,
       hasAudio: !!at,
       live: false,
+      // Movie-timeline time (s) of frame 0: a <video> element's currentTime / mediaTime
+      // minus this is the `t` used by frame times (non-zero for clips trimmed in Photos).
+      origin: this._videoOrigin,
     }
   }
 

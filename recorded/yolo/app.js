@@ -270,6 +270,12 @@ const exportName = () => `${(file?.name || 'clip').replace(/\.[^.]*$/, '') || 'c
 
 async function exportRunFn() {
   if (!result || !file) return
+  if (source.meta.duration > 180 && !confirm(`Exporting a ${mmss(source.meta.duration)} clip needs a lot of memory ` +
+    'on iPhone and may fail. Shorter clips (under 3 minutes) are safest. Export anyway?')) {
+    // Declined: stay on review (a Retry from the error panel comes back to review too).
+    if (studio.state === 'error') { clearErrors(); setState('review') }
+    return
+  }
   clearErrors()
   clearSaved()
   const current = exportRun = { ac: new AbortController(), cancelled: false, hidden: false }

@@ -4,6 +4,7 @@ test('video-source: meta of bus-3s', async () => {
   const s = await FileVideoSource.open(await fixture('bus-3s.mp4'))
   assertEqual([s.meta.width, s.meta.height, s.meta.frameCount, s.meta.hasAudio], [810, 1080, 90, true])
   assertClose(s.meta.duration, 3.0, 0.04); assertClose(s.meta.fps, 30, 0.5)
+  assert(Number.isFinite(s.meta.origin), 'meta.origin is finite'); assertClose(s.meta.origin, 0, 0.1, 'meta.origin')
 })
 test('video-source: yields 90 ordered frames', async () => {
   const s = await FileVideoSource.open(await fixture('bus-3s.mp4')); let n = 0, last = -1

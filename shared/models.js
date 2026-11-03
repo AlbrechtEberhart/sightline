@@ -1,6 +1,7 @@
 // Model download (cached in Cache Storage, shared by Live and Studio) and ORT session creation.
 import { ort } from './lib/ort.js'
 
+// Bump the version whenever the model files change under the same URL, otherwise phones keep the old model.
 export const CACHE_NAME = 'cv-models-v1'
 const MIN_MODEL_BYTES = 1000000
 

@@ -26,7 +26,9 @@ export function createReview(video, canvas) {
     ctx.clearRect(0, 0, w, h)
     if (!data || !w || !h) return
     const { result, meta, showLabels } = data
-    const boxes = result.detections[frameIndexAt(result.times, t)] || []
+    // The element's clock is the movie timeline; frame times start at the first frame.
+    const origin = meta.origin ?? 0
+    const boxes = result.detections[frameIndexAt(result.times, t - origin)] || []
     drawDetections(ctx, boxes, { ...fitContain(meta.width, meta.height, w, h), showLabels, dpr })
   }
 
