@@ -67,8 +67,8 @@ YOLO11n is from Ultralytics and is licensed under **AGPL-3.0**. That is acceptab
 
 ## Deploying to GitHub Pages
 
-1. Create a GitHub repo and push the `main` branch. (Pushing is your step.)
-2. Go to **Settings → Pages** and choose **Deploy from branch**, `main` / root.
+1. Create a GitHub repo and push this repo's default branch, `master` (or whatever your default branch is). (Pushing is your step.)
+2. Go to **Settings → Pages** and choose **Deploy from branch**, that same branch (`master`) / root.
 3. The site is at `https://<user>.github.io/<repo>/`.
 4. On the iPhone, open the Live and Studio pages in Safari and choose **Share → Add to Home Screen**. The names are Sightline Live and Sightline Studio.
 

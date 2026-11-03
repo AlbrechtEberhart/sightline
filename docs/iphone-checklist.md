@@ -5,6 +5,7 @@ Manual checks on a real iPhone 12, run against the deployed site at `https://<us
 ## Install
 
 - [ ] Both apps install from Safari's Share → Add to Home Screen, named `Sightline Live` and `Sightline Studio`.
+- [ ] The two home-screen icons have distinct names and distinct icons.
 
 ## Sightline Live
 
@@ -26,6 +27,9 @@ Manual checks on a real iPhone 12, run against the deployed site at `https://<us
 - [ ] The exported clip keeps the source audio in sync with the picture.
 - [ ] Leaving the page during processing and returning resumes from the last processed frame.
 - [ ] A clip longer than 2 minutes shows the warning with the estimated processing time.
+- [ ] Export a 3–5 minute clip and note whether it completes. This is a memory check; the app warns before exporting clips over 3 minutes.
+- [ ] Process and review a clip trimmed in the Photos app: the boxes line up with the objects during review.
+- [ ] Process and export a default HDR (HEVC) iPhone clip: the colours in the export look reasonable.
 
 ## Tests
 
@@ -38,3 +42,5 @@ Run these in Safari on the iPhone. Keep the browser tab visible while they run, 
 ## Offline
 
 - [ ] Open each app once, and wait until the model has finished loading (the loading message goes away and detection runs). Then turn on airplane mode. Both apps still open and run. The app shell and the model are cached separately, so both steps are needed.
+- [ ] Run the offline check from the installed home-screen icons, not from Safari: iOS keeps the storage of home-screen apps separate from Safari's, so a cache filled in Safari does not help them.
+- [ ] In Studio, run Process once at each input size you'll use offline before going offline. Each input size is a separate model download.
