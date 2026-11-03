@@ -2,15 +2,17 @@
 import { ort } from './lib/ort.js'
 
 export const CACHE_NAME = 'cv-models-v1'
+const MIN_MODEL_BYTES = 1000000
 
 export const MODEL_URLS = {
   320: new URL('../models/yolo11n-320.onnx', import.meta.url),
   640: new URL('../models/yolo11n-640.onnx', import.meta.url),
 }
 
-function downloadError(message) {
+function downloadError(message, cause) {
   const e = new Error(message)
   e.name = 'ModelDownloadError'
+  if (cause !== undefined) e.cause = cause
   return e
 }
 
@@ -23,8 +25,12 @@ async function openCache() {
   }
 }
 
+function totalOf(res) {
+  return Number(res.headers.get('Content-Length')) || 0
+}
+
 async function readBody(res, onProgress) {
-  const total = Number(res.headers.get('Content-Length')) || 0
+  const total = totalOf(res)
   if (!res.body || !res.body.getReader) {
     const buf = new Uint8Array(await res.arrayBuffer())
     if (onProgress) onProgress(buf.byteLength, total || buf.byteLength)
@@ -46,6 +52,21 @@ async function readBody(res, onProgress) {
   return out
 }
 
+// Returns an error message if the response/bytes are not a plausible complete model, else null.
+function validate(res, bytes) {
+  const total = totalOf(res)
+  if (total && bytes.byteLength !== total) {
+    return `truncated body (${bytes.byteLength} of ${total} bytes)`
+  }
+  if ((res.headers.get('Content-Type') || '').toLowerCase().includes('text/html')) {
+    return 'unexpected text/html response'
+  }
+  if (bytes.byteLength < MIN_MODEL_BYTES) {
+    return `body too small (${bytes.byteLength} bytes)`
+  }
+  return null
+}
+
 export async function fetchModel(url, onProgress) {
   const href = typeof url === 'string' ? url : url.href
   const cache = await openCache()
@@ -53,19 +74,31 @@ export async function fetchModel(url, onProgress) {
   if (cache) {
     try {
       const hit = await cache.match(href)
-      if (hit) return await readBody(hit, onProgress)
-    } catch { /* fall through to network */ }
+      if (hit) {
+        const bytes = await readBody(hit.clone(), null)
+        if (!validate(hit, bytes)) {
+          if (onProgress) onProgress(bytes.byteLength, bytes.byteLength)
+          return bytes
+        }
+        await cache.delete(href) // bad entry: evict and re-download
+      }
+    } catch {
+      try { await cache.delete(href) } catch { /* ignore */ }
+    }
   }
 
-  let res
+  let res, bytes
   try {
     res = await fetch(href)
+    if (!res.ok) throw downloadError(`Model download failed (${href}): HTTP ${res.status}`)
+    bytes = await readBody(res, onProgress)
   } catch (e) {
-    throw downloadError(`Model download failed (${href}): ${e.message}`)
+    if (e && e.name === 'ModelDownloadError') throw e
+    throw downloadError(`Model download failed (${href}): ${e && e.message}`, e)
   }
-  if (!res.ok) throw downloadError(`Model download failed (${href}): HTTP ${res.status}`)
 
-  const bytes = await readBody(res, onProgress)
+  const problem = validate(res, bytes)
+  if (problem) throw downloadError(`Model download failed (${href}): ${problem}`)
 
   if (cache) {
     try {
