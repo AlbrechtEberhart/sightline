@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; }
+  #summary { font-weight: 600; margin-bottom: 12px; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 2px 0; }
+  .pass::before { content: "PASS "; color: #0a7d2c; font-weight: 600; }
+  .fail::before { content: "FAIL "; color: #c4161c; font-weight: 600; }
+  .skip::before { content: "SKIP "; color: #8a6d00; font-weight: 600; }
+  .msg { color: #666; margin-left: 8px; }
+</style>
+</head>
+<body>
+<h1>Tests</h1>
+<div id="summary">Running...</div>
+<ul id="list"></ul>
+<script type="module">
+  import { run } from './harness.js'
+  const grep = new URLSearchParams(location.search).get('grep') || ''
+  const list = document.getElementById('list')
+  const summary = document.getElementById('summary')
+  const res = await run({
+    grep,
+    onResult(r) {
+      const li = document.createElement('li')
+      li.className = r.status
+      li.textContent = r.name
+      if (r.message) {
+        const m = document.createElement('span')
+        m.className = 'msg'
+        m.textContent = r.message
+        li.appendChild(m)
+      }
+      list.appendChild(li)
+    },
+  })
+  summary.textContent = `passed: ${res.passed}, failed: ${res.failed}, skipped: ${res.skipped}`
+</script>
+</body>
+</html>
