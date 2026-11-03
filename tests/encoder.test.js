@@ -1,5 +1,5 @@
 import { test, assert, assertEqual, assertClose, skip, fixture } from './harness.js'
-import { capTo1080, Mp4Encoder } from '../shared/encoder.js'
+import { capTo1080, codecCandidates, Mp4Encoder } from '../shared/encoder.js'
 import { saveFile } from '../shared/save.js'
 import { FileVideoSource } from '../recorded/video-source.js'
 const enc = async o => { try { return await Mp4Encoder.create(o) } catch (e) { if (e.name === 'EncoderUnsupportedError') skip('H.264 encoding unavailable in this browser'); throw e } }
@@ -36,4 +36,17 @@ test('encoder: saveFile falls back to download', async () => {
 test('encoder: saveFile cancelled', async () => {
   const nav = { canShare: () => true, share: async () => { throw new DOMException('no', 'AbortError') } }
   assertEqual(await saveFile(new Blob(['x']), 'x.mp4', nav), 'cancelled')
+})
+test('encoder: codec candidates by macroblock rate', () => {
+  assertEqual(codecCandidates(1920, 1080, 30)[0], 'avc1.640028'); assertEqual(codecCandidates(1920, 1080, 60)[0], 'avc1.64002A')
+  assertEqual(codecCandidates(3840, 2160, 30)[0], 'avc1.640033')
+})
+test('encoder: abort releases and blocks further use', async () => {
+  const e = await enc({ width: 320, height: 240, fps: 30 })
+  await e.addFrame(frame(0), 0); await e.addFrame(frame(1), 1 / 30)
+  e.abort(); e.abort()
+  let a = null, b = null
+  try { await e.addFrame(frame(2), 2 / 30) } catch (x) { a = x }
+  try { await e.finish() } catch (x) { b = x }
+  assert(a && b, 'addFrame and finish must reject after abort'); assertEqual(b.message, 'encoder already finished')
 })

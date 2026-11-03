@@ -9,6 +9,15 @@ function defaultDownload(url, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
+/**
+ * Share the file via the iOS share sheet, or fall back to a download.
+ *
+ * MUST be called directly from a user-gesture handler (e.g. a "Save" button click),
+ * never at the end of an async export chain: navigator.share needs transient user
+ * activation, which WebKit drops across a long await such as an encode/export.
+ *
+ * @returns {Promise<'shared'|'downloaded'|'cancelled'>}
+ */
 export async function saveFile(blob, filename, nav = navigator, download = defaultDownload) {
   const file = new File([blob], filename, { type: blob.type })
   if (nav.canShare?.({ files: [file] })) {
