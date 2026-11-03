@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>Sightline</title>
+<link rel="stylesheet" href="shared/ui.css">
+<style>
+  .launcher { max-width: 720px; margin: 0 auto; padding: 24px 16px; min-height: 100%; display: flex; flex-direction: column; gap: 16px; }
+  .launcher h1 { margin: 8px 0 0; font-size: 28px; }
+  .launcher .lead { margin: 0 0 8px; color: var(--muted); }
+  .card {
+    display: block; text-decoration: none; color: var(--text);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 22px;
+  }
+  .card:hover, .card:focus-visible { border-color: var(--accent); outline: none; }
+  .card h2 { margin: 0 0 6px; font-size: 22px; color: var(--accent); }
+  .card p { margin: 0; color: var(--muted); }
+</style>
+</head>
+<body>
+<main class="launcher">
+  <h1>Sightline</h1>
+  <p class="lead">On-device computer vision. Everything runs in your browser.</p>
+  <a class="card" href="live/yolo/">
+    <h2>Sightline Live</h2>
+    <p>Real-time object detection from your camera.</p>
+  </a>
+  <a class="card" href="recorded/yolo/">
+    <h2>Sightline Studio</h2>
+    <p>Analyse a recorded video and review the detections.</p>
+  </a>
+  <p class="footer-disclaimer">Runs fully on your device. No video leaves your phone.</p>
+</main>
+<script type="module" src="shared/register-sw.js"></script>
+</body>
+</html>

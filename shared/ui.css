@@ -1,0 +1,168 @@
+:root {
+  --bg: #0b1220;
+  --panel: #111a2e;
+  --text: #e5edf7;
+  --muted: #8da2c0;
+  --accent: #5eead4;
+  --danger: #f87171;
+  --line: #1f2c47;
+  --radius: 14px;
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+a { color: var(--accent); }
+button { font: inherit; color: inherit; }
+
+/* App shell: left | viewport | right in landscape */
+.app {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr minmax(180px, 260px);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "top top top"
+    "left viewport right"
+    "foot foot foot";
+  height: 100%;
+  gap: 10px;
+  padding: 10px;
+}
+.app > .topbar { grid-area: top; }
+.app > .left { grid-area: left; }
+.app > .viewport { grid-area: viewport; }
+.app > .right { grid-area: right; }
+.app > .footer-disclaimer { grid-area: foot; }
+.app > .left, .app > .right {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  overflow-y: auto;
+}
+.viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.viewport canvas, .viewport video { max-width: 100%; max-height: 100%; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 4px 2px;
+}
+.topbar h1 { font-size: 17px; margin: 0; flex: 1; }
+
+.status {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.footer-disclaimer {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  padding: 2px 8px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pill.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.section-title {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.section-title:first-child { margin-top: 0; }
+
+.progress {
+  height: 8px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress > .bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.error-card {
+  background: var(--panel);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px;
+}
+.error-card h2 { margin: 0 0 6px; font-size: 16px; color: var(--danger); }
+.error-card p { margin: 0 0 10px; color: var(--text); }
+.error-card .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.sheet {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 12px;
+}
+
+/* Portrait: side panels become a bottom sheet under the viewport */
+@media (orientation: portrait) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "top"
+      "viewport"
+      "left"
+      "right"
+      "foot";
+    gap: 8px;
+  }
+  .app > .left, .app > .right {
+    border-radius: var(--radius) var(--radius) 0 0;
+    max-height: 34vh;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .app > .right { border-radius: 0; margin-top: -8px; }
+}
