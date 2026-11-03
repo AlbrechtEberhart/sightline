@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sightline Live">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="icon" href="../icons/icon-180.png" type="image/png">
+<title>Sightline Live</title>
+<link rel="stylesheet" href="../../shared/ui.css">
+<style>
+  /* Full-screen camera with the controls floating over it. */
+  body { overflow: hidden; }
+  .app.live { display: block; position: relative; padding: 0; }
+  .live .viewport { position: absolute; inset: 0; display: block; border-radius: 0; }
+  .live .viewport video, .live .viewport canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none;
+  }
+  .live .viewport video { object-fit: cover; }
+  .live .viewport canvas { pointer-events: none; }
+  .live .topbar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding: 10px 12px;
+    background: linear-gradient(rgba(11,18,32,.75), rgba(11,18,32,0));
+  }
+  .live .topbar select.pill { appearance: none; max-width: 46vw; }
+  .live .topbar .pill[hidden] { display: none; }
+  .live .readout {
+    position: absolute; left: 12px; right: 12px; bottom: 46px; z-index: 3;
+    display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+  }
+  .live .readout .status, .live .readout .hint {
+    align-self: flex-start; padding: 3px 8px; border-radius: 8px; background: rgba(11,18,32,.7);
+  }
+  .live .readout .hint { color: var(--danger); font-size: 12px; }
+  .live .footer-disclaimer {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 8px;
+    background: linear-gradient(rgba(11,18,32,0), rgba(11,18,32,.8));
+  }
+  .live .overlay { position: absolute; inset: 0; z-index: 4; display: grid; align-content: center; pointer-events: none; }
+  .live .overlay > * { pointer-events: auto; }
+  .live .loading { margin: 0 24px; text-align: center; color: var(--muted); }
+  .live .loading .progress { margin-top: 8px; }
+  .live .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .live .sheet[hidden] { display: none; }
+  .live .sheet label.row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  .live .sheet input[type=range] { flex: 1; accent-color: var(--accent); }
+  .live .sheet .choices { display: flex; gap: 8px; }
+  .live .save-row { display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="app live">
+  <div class="topbar">
+    <h1>Sightline Live</h1>
+    <select id="lens" class="pill" aria-label="Camera lens" hidden></select>
+    <button id="rec" class="pill" type="button" disabled>Record</button>
+    <span class="save-row">
+      <button id="save" class="pill active" type="button" hidden>Save</button>
+      <a id="download" class="pill" hidden>Download</a>
+    </span>
+    <button id="settings-btn" class="pill" type="button" aria-expanded="false">Settings</button>
+  </div>
+
+  <div id="viewport" class="viewport">
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="readout">
+    <div id="status" class="status" aria-live="polite">Starting…</div>
+    <div id="hint" class="hint" hidden></div>
+  </div>
+
+  <div class="overlay">
+    <div id="loading" class="loading" hidden>
+      <div id="loading-text">Loading model…</div>
+      <div class="progress"><div id="bar" class="bar"></div></div>
+    </div>
+    <div id="errors"></div>
+  </div>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="section-title">Confidence</div>
+    <label class="row"><input id="conf" type="range" min="0.1" max="0.9" step="0.05"><span id="conf-val"></span></label>
+    <div class="section-title">Input size</div>
+    <div class="choices">
+      <button class="pill" type="button" data-size="320">320</button>
+      <button class="pill" type="button" data-size="640">640</button>
+    </div>
+    <div class="section-title">Labels</div>
+    <div class="choices"><button id="labels" class="pill" type="button">Show labels</button></div>
+  </div>
+
+  <div class="footer-disclaimer">RESEARCH DEMO · NOT A DRIVING AID</div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
