@@ -30,6 +30,7 @@ export function showError(container, { title, body, actions = [] }) {
 }
 
 export function formatEta(seconds) {
+  if (!Number.isFinite(seconds)) return '—'
   const s = Math.max(0, Math.round(seconds))
   if (s < 60) return `${s} s`
   const m = Math.floor(s / 60)

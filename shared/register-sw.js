@@ -9,4 +9,13 @@ if ('serviceWorker' in navigator && (!isLocal || forced)) {
   navigator.serviceWorker.register(swUrl.href, { scope }).catch((err) => {
     console.warn('service worker registration failed', err)
   })
+
+  // On first load the page and its scripts were fetched before the worker controlled
+  // the page, so hand the worker the URLs this page already used for caching.
+  navigator.serviceWorker.ready.then((reg) => {
+    const urls = [location.href, ...performance.getEntriesByType('resource')
+      .map((e) => e.name)
+      .filter((u) => new URL(u).origin === location.origin)]
+    reg.active?.postMessage({ type: 'cache-urls', urls: [...new Set(urls)] })
+  }).catch(() => {})
 }

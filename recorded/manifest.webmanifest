@@ -1,7 +1,7 @@
 {
   "name": "Sightline Studio",
   "short_name": "SL Studio",
-  "start_url": "./",
+  "start_url": "yolo/",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0b1220",

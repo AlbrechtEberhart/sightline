@@ -146,7 +146,8 @@ button { font: inherit; color: inherit; }
   padding: 12px;
 }
 
-/* Portrait: side panels become a bottom sheet under the viewport */
+/* Portrait: side panels stack under the viewport as one bottom sheet area,
+   sharing a combined cap of 36vh (18vh each) so the viewport keeps >50% of the height. */
 @media (orientation: portrait) {
   .app {
     grid-template-columns: 1fr;
@@ -160,9 +161,12 @@ button { font: inherit; color: inherit; }
     gap: 8px;
   }
   .app > .left, .app > .right {
-    border-radius: var(--radius) var(--radius) 0 0;
-    max-height: 34vh;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    max-height: 18vh;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    padding: 10px 12px;
   }
-  .app > .right { border-radius: 0; margin-top: -8px; }
+  .app > .left { border-radius: var(--radius) var(--radius) 0 0; border-bottom: 0; margin-bottom: -8px; }
+  .app > .right { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
 }
