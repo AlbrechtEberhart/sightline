@@ -24,8 +24,8 @@ Export settings: Ultralytics `>=8.3.40,<9` (the notebook installs the newest rel
 
 The notebook sets `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` because current Colab torch (2.6+) otherwise refuses to load the Ultralytics checkpoint. It prints the exact `ultralytics` and `torch` versions it used. Those exact versions are recorded here after the run:
 
-- ultralytics: (not yet run)
-- torch: (not yet run)
+- ultralytics: 8.4.200
+- torch: 2.11.0+cpu (Colab, 2026-11-03)
 
 ## Licence
 
