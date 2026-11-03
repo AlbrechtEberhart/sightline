@@ -29,8 +29,16 @@ const TAG_TEXT = '#0b1220'
 const STROKE_PX = 2
 const RADIUS_PX = 4
 
-// dst = src * scale + offset. Draws each box as a rounded stroke in its class colour,
-// with an optional label tag above the box (inside the top edge when there is no room above).
+// Draws each box as a rounded outline in its class colour, with a label tag
+// ("<label> <score>%") above the box, or inside its top edge when there is no room above.
+//
+// Coordinate contract: scale, offsetX and offsetY map source-image pixels to canvas
+// backing-store pixels, dst = src * scale + offset. Callers compute them with fitCover or
+// fitContain against canvas.width and canvas.height, not CSS pixels. dpr only sizes the
+// stroke, corner radius and tag. It never moves a box.
+//
+// The outline is inset by half its width, so the stroke lies inside the box bounds.
+// The tag is clamped to the canvas when ctx.canvas is available.
 export function drawDetections(ctx, boxes, { scale = 1, offsetX = 0, offsetY = 0, showLabels = true, dpr = 1 } = {}) {
   for (const det of boxes) {
     const [sx, sy, sw, sh] = det.box
@@ -40,12 +48,19 @@ export function drawDetections(ctx, boxes, { scale = 1, offsetX = 0, offsetY = 0
     const h = sh * scale
     const color = colorFor(det.classId)
 
+    const lineWidth = STROKE_PX * dpr
+    const half = lineWidth / 2
     ctx.save()
-    ctx.lineWidth = STROKE_PX * dpr
+    ctx.lineWidth = lineWidth
     ctx.strokeStyle = color
     ctx.beginPath()
-    if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, RADIUS_PX * dpr)
-    else ctx.rect(x, y, w, h)
+    const rx = x + half
+    const ry = y + half
+    const rw = Math.max(0, w - lineWidth)
+    const rh = Math.max(0, h - lineWidth)
+    const radius = Math.max(0, RADIUS_PX * dpr - half)
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(rx, ry, rw, rh, radius)
+    else ctx.rect(rx, ry, rw, rh)
     ctx.stroke()
     ctx.restore()
 
@@ -58,11 +73,14 @@ export function drawDetections(ctx, boxes, { scale = 1, offsetX = 0, offsetY = 0
     ctx.font = `600 ${TAG_FONT_PX * dpr}px system-ui, sans-serif`
     ctx.textBaseline = 'middle'
     const tagW = ctx.measureText(text).width + 2 * pad
-    const tagY = y - tagH < 0 ? y : y - tagH
+    const canvasW = ctx.canvas?.width
+    let tagX = Math.max(0, x)
+    if (Number.isFinite(canvasW)) tagX = Math.max(0, Math.min(tagX, canvasW - tagW))
+    const tagY = Math.max(0, y - tagH < 0 ? y : y - tagH)
     ctx.fillStyle = color
-    ctx.fillRect(x, tagY, tagW, tagH)
+    ctx.fillRect(tagX, tagY, tagW, tagH)
     ctx.fillStyle = TAG_TEXT
-    ctx.fillText(text, x + pad, tagY + tagH / 2)
+    ctx.fillText(text, tagX + pad, tagY + tagH / 2)
     ctx.restore()
   }
 }
