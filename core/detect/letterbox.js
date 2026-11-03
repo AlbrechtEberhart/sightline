@@ -14,14 +14,18 @@ export function toInput([x, y, w, h], lb) {
   return [x * lb.scale + lb.padX, y * lb.scale + lb.padY, w * lb.scale, h * lb.scale]
 }
 
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+
 export function toSource([x, y, w, h], lb, srcW, srcH) {
   const sx = (x - lb.padX) / lb.scale
   const sy = (y - lb.padY) / lb.scale
   const sw = w / lb.scale
   const sh = h / lb.scale
-  const x1 = Math.max(0, sx)
-  const y1 = Math.max(0, sy)
-  const x2 = Math.min(srcW, sx + sw)
-  const y2 = Math.min(srcH, sy + sh)
+  // Clamp both endpoints independently so a box lying fully outside the
+  // source yields zero size instead of a negative w or h.
+  const x1 = clamp(sx, 0, srcW)
+  const y1 = clamp(sy, 0, srcH)
+  const x2 = clamp(sx + sw, 0, srcW)
+  const y2 = clamp(sy + sh, 0, srcH)
   return [x1, y1, x2 - x1, y2 - y1]
 }
