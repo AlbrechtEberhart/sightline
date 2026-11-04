@@ -1,1 +1,2 @@
 shared/vendor/** -text
+shared/vendor/opencv/opencv.js binary

@@ -10,11 +10,11 @@ export const MODEL_URLS = {
   640: new URL('../models/yolo11n-640.onnx', import.meta.url),
 }
 
-// OpenCV.js for Panorama. Task 3 fills in the real size and SHA-256 once the file is vendored.
+// OpenCV.js for Panorama (vendored, checked against this size and SHA-256 by fetchAsset).
 export const OPENCV_ASSET = {
   url: new URL('./vendor/opencv/opencv.js', import.meta.url),
-  bytes: 0,
-  sha256: '',
+  bytes: 10378215,
+  sha256: '19b46167b59efbef9cc3836264b0b657110833e4b1df84282004b8b3141c048d',
 }
 
 function downloadError(message, cause) {
