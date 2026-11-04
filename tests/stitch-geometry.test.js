@@ -3,7 +3,7 @@ import { LENS_HFOV, focalPx, displayedHfov } from '../core/stitch/camera-model.j
 import {
   rotX, rotY, rotZ, mul, transpose, apply, intrinsics, nearestRotation, rotationFromHomography,
   yawPitchRoll, chain, waveCorrect, recentre, focalFromHomographies, cylProject, cylToImage, cylBounds,
-  outputScale, cropRect,
+  outputScale, cropRect, trimEnds,
 } from '../core/stitch/geometry.js'
 
 const DEG = Math.PI / 180
@@ -183,6 +183,65 @@ test('geometry: cropRect trims ragged edges', () => {
   assertEqual(cropRect(Float32Array.from([5, 6]), Float32Array.from([1, 2])), { x: 0, y: 0, width: 0, height: 0 })
   // An invalid column between valid ones leaves no usable rectangle.
   assertEqual(cropRect(Float32Array.from([0, NEVER, 0]), Float32Array.from([50, -1, 50])), { x: 0, y: 0, width: 0, height: 0 })
+})
+
+// Largest cropRect area over every column interval, by brute force.
+function bruteCropArea(top, bottom) {
+  let best = 0
+  for (let l = 0; l < top.length; l++) {
+    let t = -Infinity, b = Infinity
+    for (let r = l; r < top.length; r++) {
+      if (!(top[r] <= bottom[r])) break
+      t = Math.max(t, top[r])
+      b = Math.min(b, bottom[r])
+      best = Math.max(best, (r - l + 1) * Math.max(0, Math.floor(b) - Math.ceil(t) + 1))
+    }
+  }
+  return best
+}
+
+// Seeded ragged coverage: uncovered margins, slanted end columns as a pitched photo's edge gives, a ragged top and
+// bottom, and optionally one uncovered column in the middle.
+function raggedColumns(seed, gap) {
+  let s = seed
+  const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296)
+  const n = 40 + Math.floor(rnd() * 80)
+  const top = new Float64Array(n).fill(Infinity), bottom = new Float64Array(n).fill(-Infinity)
+  const lead = Math.floor(rnd() * 4), trail = Math.floor(rnd() * 4)
+  const slantL = 2 + Math.floor(rnd() * 10), slantR = 2 + Math.floor(rnd() * 10), slope = 3 + rnd() * 15
+  for (let i = lead; i < n - trail; i++) {
+    let t = 4 + rnd() * 6 + 3 * Math.sin(i / 7), b = 96 - rnd() * 6 - 3 * Math.cos(i / 5)
+    if (i - lead < slantL) b -= (slantL - (i - lead)) * slope // left edge slants: only the top is covered
+    if (n - trail - 1 - i < slantR) t += (slantR - (n - trail - 1 - i)) * slope // right edge: only the bottom
+    if (t <= b) {
+      top[i] = t
+      bottom[i] = b
+    }
+  }
+  if (gap) {
+    const g = Math.floor(n / 4 + rnd() * n / 2)
+    top[g] = Infinity
+    bottom[g] = -Infinity
+  }
+  return [top, bottom]
+}
+
+test('geometry: trimEnds finds the largest crop', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const [top, bottom] = raggedColumns(seed, seed % 2 === 0)
+    const rect = cropRect(...trimEnds(top, bottom))
+    assertEqual(rect.width * rect.height, bruteCropArea(top, bottom))
+    for (let x = rect.x; x < rect.x + rect.width; x++) {
+      assert(top[x] <= rect.y && bottom[x] >= rect.y + rect.height - 1, `seed ${seed}: column ${x} not covered`)
+    }
+  }
+  // The slanted ends really are trimmed: plain cropRect on the same columns is smaller.
+  const [top, bottom] = raggedColumns(3, false)
+  const plain = cropRect(top, bottom), trimmed = cropRect(...trimEnds(top, bottom))
+  assert(trimmed.width * trimmed.height > plain.width * plain.height, 'trimEnds beats cropRect alone')
+  // Nothing covered.
+  const none = trimEnds(new Float64Array(5).fill(Infinity), new Float64Array(5).fill(-Infinity))
+  assertEqual(cropRect(...none), { x: 0, y: 0, width: 0, height: 0 })
 })
 
 test('geometry: recentre keeps a 200 degree sweep unwrapped', () => {

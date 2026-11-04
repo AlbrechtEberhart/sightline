@@ -83,14 +83,16 @@ export function makeScene({ seed = 1, f, yawRange = [-60, 200], height = Math.ro
 }
 
 // The view of a width x height camera with focal f (cx = width/2, cy = height/2) at the given orientation.
-// Each pixel's ray d = R·K^-1·[x, y, 1] maps to u = f·atan2(d.x, d.z) + u0, v = f·d.y / hypot(d.x, d.z) + v0,
-// bilinearly sampled (clamped at the scene edges) and multiplied by brightness.
+// Each pixel's ray d = R·K^-1·[x, y, 1] maps to u = f·θ + u0, v = f·d.y / hypot(d.x, d.z) + v0, where
+// θ = atan2(d.x, d.z) taken in [yawRange[0], yawRange[0] + 360°), so a scene made with a 360° yawRange wraps around.
+// It is bilinearly sampled (clamped at the scene edges) and multiplied by brightness.
 export function renderView(scene, { yawDeg, pitchDeg = 0, rollDeg = 0, width, height, brightness = 1 }) {
   const { f, u0, v0 } = scene
   const sw = scene.canvas.width, sh = scene.canvas.height
   const src = scenePixels(scene.canvas)
   const R = mul(rotY(yawDeg), mul(rotX(pitchDeg), rotZ(rollDeg)))
   const cx = width / 2, cy = height / 2
+  const start = -u0 / f, turn = 2 * Math.PI
   const out = new OffscreenCanvas(width, height)
   const ctx = out.getContext('2d', { willReadFrequently: true })
   const img = ctx.createImageData(width, height)
@@ -98,7 +100,8 @@ export function renderView(scene, { yawDeg, pitchDeg = 0, rollDeg = 0, width, he
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const d = apply(R, [(x - cx) / f, (y - cy) / f, 1])
-      const u = Math.min(sw - 1, Math.max(0, f * Math.atan2(d[0], d[2]) + u0))
+      const theta = Math.atan2(d[0], d[2])
+      const u = Math.min(sw - 1, Math.max(0, f * (theta - turn * Math.floor((theta - start) / turn)) + u0))
       const v = Math.min(sh - 1, Math.max(0, f * d[1] / Math.hypot(d[0], d[2]) + v0))
       const x0 = Math.min(sw - 2, Math.floor(u)), y0 = Math.min(sh - 2, Math.floor(v))
       const ax = u - x0, ay = v - y0

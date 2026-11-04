@@ -5,6 +5,7 @@ import { Stitcher } from '../core/stitch/stitcher.js'
 import { makeScene, renderView } from './fixtures/synthetic-pan.js'
 import { toThumb } from '../core/stitch/thumb.js'
 import { phaseShift } from '../core/stitch/shift.js'
+import { cylBounds, mul, rotX, rotY } from '../core/stitch/geometry.js'
 
 const W = 640, H = 360
 const F = focalPx({ lens: 'wide', width: W, height: H })
@@ -124,16 +125,51 @@ test('stitcher: output matches the scene', async () => {
   const mid = Math.round(out.width / 2)
   const diff = await sceneDiff(out, mid - STRIP / 2, mid + STRIP / 2)
   assert(diff < 12, `mean abs grey difference ${diff.toFixed(2)}`)
+  // The worker's first strip ends at grid column 1024. The grid is the uncropped cylinder at scale 1, and the crop
+  // trims about the same from each end, so that column is about 1024 - (gridWidth - width) / 2 in the output.
+  const b = cylBounds(TRUTH.map((yaw) => mul(rotY(yaw - 52), rotX(PITCH))), F, W, H)
+  const boundary = 1024 - Math.round((Math.ceil(b.uMax - b.uMin) - r.width) / 2)
+  const strip = await sceneDiff(out, boundary - 16, boundary + 17)
+  assert(strip < 12, `strip boundary at column ${boundary}: mean abs grey difference ${strip.toFixed(2)}`)
 })
+
+// Output column of the cylinder point at yaw (degrees): the output is centred on the recentred middle, yaw 52.
+const columnAt = (out, yaw) => Math.round(out.width / 2 + (yaw - 52) * RAD * F)
 
 test('stitcher: alternating brightness still blends', async () => {
   const r = await stitchViews([1, 0.8, 1, 0.8, 1])
   const out = await greyOf(r.blob)
   for (let k = 0; k + 1 < TRUTH.length; k++) {
-    const seam = Math.round(out.width / 2 + ((TRUTH[k] + TRUTH[k + 1]) / 2 - 52) * RAD * F)
+    const seam = columnAt(out, (TRUTH[k] + TRUTH[k + 1]) / 2)
     const diff = await sceneDiff(out, seam - 8, seam + 9)
     assert(diff < 12, `seam ${k}–${k + 1} at column ${seam}: mean abs grey difference ${diff.toFixed(2)}`)
   }
+  // Whole-strip bands: without gain compensation these differ by about 15 grey levels.
+  for (const [name, yaw] of [['middle', 52], ['dim view 1', TRUTH[1]], ['dim view 3', TRUTH[3]]]) {
+    const c = columnAt(out, yaw)
+    const diff = await sceneDiff(out, c - STRIP / 2, c + STRIP / 2)
+    assert(diff < 12, `${name} at column ${c}: mean abs grey difference ${diff.toFixed(2)}`)
+  }
+})
+
+test('stitcher: sweep is capped at about 340 degrees', async () => {
+  const wide = makeScene({ f: F, yawRange: [-60, 300] }) // a full turn, so the views wrap around
+  const yaws = Array.from({ length: 9 }, (_, i) => 43 * i)
+  const s = await stitcher('studio')
+  for (const yawDeg of yaws) {
+    s.add(await createImageBitmap(renderView(wide, { yawDeg, pitchDeg: PITCH, width: W, height: H })))
+  }
+  const r = await s.finish()
+  const hfov = 2 * Math.atan(W / 2 / F) / RAD
+  // Photo k is kept while 43·k + hfov <= 340: k <= 6.
+  assertEqual(r.used, 7)
+  assert(43 * (r.used - 1) + hfov <= 340 && 43 * r.used + hfov > 340, `used ${r.used}, hfov ${hfov.toFixed(1)}`)
+  assertEqual(r.notes, ['Used the first 7 photos (the panorama is limited to about 340°)'])
+  assertEqual(r.yaws.length, 7)
+  const bitmap = await createImageBitmap(r.blob)
+  assertEqual([bitmap.width, bitmap.height], [r.width, r.height])
+  bitmap.close()
+  assert(r.width > 0 && r.width < F * 340 * RAD, `width ${r.width}`)
 })
 
 test('stitcher: output is capped at 16 MP', async () => {

@@ -337,3 +337,39 @@ export function cropRect(colTop, colBottom) {
   if (!(height > 0)) return { x: 0, y: 0, width: 0, height: 0 }
   return { x: first, y, width: last - first + 1, height }
 }
+
+// cropRect intersects the coverage of every column between the first and last covered ones, but a pitched or rolled
+// photo's outer edge slants on the cylinder, so the end columns are only partly covered and would collapse the crop's
+// height. trimEnds picks the column interval [l, r] whose cropRect area is largest and returns copies of colTop and
+// colBottom (Float64Array) with the columns outside it marked uncovered (Infinity / -Infinity), ready for cropRect.
+// An interval never spans an uncovered column. Exact search with pruning: an interval's height never exceeds its first
+// column's, and only shrinks as it grows to the right.
+export function trimEnds(colTop, colBottom) {
+  const n = colTop.length
+  const height = (top, bottom) => Math.floor(bottom) - Math.ceil(top) + 1
+  let first = 0, last = n - 1
+  while (first < n && !(colTop[first] <= colBottom[first])) first++
+  while (last > first && !(colTop[last] <= colBottom[last])) last--
+  let best = 0, bestL = 0, bestR = -1
+  for (let l = first; l <= last; l++) {
+    if (!((last - l + 1) * height(colTop[l], colBottom[l]) > best)) continue
+    let top = -Infinity, bottom = Infinity
+    for (let r = l; r <= last; r++) {
+      if (colTop[r] > top) top = colTop[r]
+      if (colBottom[r] < bottom) bottom = colBottom[r]
+      const h = height(top, bottom)
+      if (!(h > 0) || (last - l + 1) * h <= best) break
+      if ((r - l + 1) * h > best) {
+        best = (r - l + 1) * h
+        bestL = l
+        bestR = r
+      }
+    }
+  }
+  const tops = new Float64Array(n).fill(Infinity), bottoms = new Float64Array(n).fill(-Infinity)
+  for (let i = bestL; i <= bestR; i++) {
+    tops[i] = colTop[i]
+    bottoms[i] = colBottom[i]
+  }
+  return [tops, bottoms]
+}

@@ -11,7 +11,7 @@
 import { loadOpenCV } from '../../shared/lib/opencv.js'
 import {
   rotY, apply, nearestRotation, yawPitchRoll, chain, waveCorrect, recentre, focalFromHomographies,
-  cylBounds, outputScale, cropRect,
+  cylBounds, outputScale, cropRect, trimEnds,
 } from './geometry.js'
 import { toThumb } from './thumb.js'
 
@@ -28,7 +28,10 @@ const GYRO_NOTE = 'One seam was placed from the gyroscope and may be visible'
 // (a full 16 MP RGB + weight accumulator would be ~256 MB, too much for an iPhone tab).
 const STRIP_COLS = 1024
 const GAIN_SCALE = 1 / 4 // gain pre-pass resolution, relative to the output
+const GAIN_LUMA = [5, 250] // pixels darker or brighter than this (clipped) in either photo are left out of the means
+const GAIN_STEP = [0.6, 1.7] // each chain step's ratio is clamped to this range
 const JPEG_QUALITY = 0.9
+const MAX_SWEEP_DEG = 340 // photos past this total sweep are dropped (see sweepCount)
 
 let cv = null
 let cfg = null // { focalPx, width, height, mode }
@@ -37,6 +40,7 @@ const photos = [] // kept photos: { bitmap, yawHint, mat (RGBA source, only whil
 const pairs = [] // pairs[k] joins photos k and k+1: { H (9 numbers, image k → k+1) | null,
 //   inliers (x_k, y_k, x_k+1, y_k+1 per match, full-res px) | null, rij, gyro }
 let prev = null // features of the last kept photo: { points (full-res x, y pairs), desc: cv.Mat }
+let scratch = null // OffscreenCanvas reused by sourceMat, emptied at the end of finish
 let dropped = false // studio: a pair failed, so this photo and all later ones are dropped
 
 let queue = Promise.resolve()
@@ -201,16 +205,29 @@ function matchPair(a, b) {
 
 async function finish() {
   try {
+    if (photos.length < 2) {
+      throw stitchError(added < 2 ? 'At least 2 photos are needed.' : "Frames 1 and 2 didn't match.")
+    }
+    let placed = place()
+    const keep = sweepCount(placed.yaws, placed.f)
+    const capped = keep < photos.length
+    if (capped) {
+      for (const p of photos.splice(keep)) p.bitmap.close()
+      pairs.length = keep - 1
+      placed = place()
+    }
     const used = photos.length
-    if (used < 2) throw stitchError(added < 2 ? 'At least 2 photos are needed.' : "Frames 1 and 2 didn't match.")
-    const { f, rotations, yaws, rolls } = place()
+    const { f, rotations, yaws, rolls } = placed
     const canvas = composite(f, rotations)
     const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: JPEG_QUALITY })
+    const { width, height } = canvas
+    canvas.width = canvas.height = 0 // release the backing store now, not at GC
     progress('encode', 1, 1)
     const notes = []
-    if (dropped) notes.push(`Stitched frames 1–${used}; frame ${used + 1} didn't match.`)
+    if (capped) notes.push(`Used the first ${used} photos (the panorama is limited to about ${MAX_SWEEP_DEG}°)`)
+    else if (dropped) notes.push(`Stitched frames 1–${used}; frame ${used + 1} didn't match.`)
     if (pairs.some((p) => p.gyro)) notes.push(GYRO_NOTE)
-    self.postMessage({ type: 'result', blob, width: canvas.width, height: canvas.height, notes, used, yaws, rolls })
+    self.postMessage({ type: 'result', blob, width, height, notes, used, yaws, rolls })
   } finally {
     for (const p of photos) {
       p.mat?.delete()
@@ -219,7 +236,21 @@ async function finish() {
     photos.length = 0
     prev?.desc.delete()
     prev = null
+    if (scratch) scratch.width = scratch.height = 0
   }
+}
+
+// How many photos to keep so the cylinder never wraps (cylBounds assumes it does not): photo k stays while the yaw
+// span of photos 0..k plus one photo's horizontal field of view, 2·atan((W/2)/f), is at most MAX_SWEEP_DEG.
+function sweepCount(yaws, f) {
+  const hfov = 2 * Math.atan(cfg.width / 2 / f) * 180 / Math.PI
+  let lo = yaws[0], hi = yaws[0]
+  for (let k = 1; k < yaws.length; k++) {
+    lo = Math.min(lo, yaws[k])
+    hi = Math.max(hi, yaws[k])
+    if (hi - lo + hfov > MAX_SWEEP_DEG) return k
+  }
+  return yaws.length
 }
 
 // Rotation between neighbours from their inlier correspondences (spec §4.4 step 1's camera rotation). With
@@ -333,6 +364,7 @@ function composite(f, Rs) {
   }
   progress('blend', 1, 1)
 
+  // trimEnds drops partly covered end columns (slanted edges of pitched or rolled photos) before cropRect.
   const crop = cropRect(...trimEnds(colTop, colBottom))
   if (crop.width === 0) throw stitchError('The photos cover no area.')
   const canvas = new OffscreenCanvas(crop.width, crop.height)
@@ -342,45 +374,15 @@ function composite(f, Rs) {
   return canvas
 }
 
-// cropRect intersects the coverage of every column between the first and last covered ones, but a pitched or
-// rolled photo's outer edge slants on the cylinder, so the end columns are only partly covered and would collapse
-// the crop's height. This picks the column interval [l, r] whose cropRect area is largest and returns copies of
-// colTop and colBottom with the columns outside it marked uncovered. Exact search with pruning: an interval's height
-// never exceeds its first column's, and only shrinks as it grows to the right.
-function trimEnds(colTop, colBottom) {
-  const n = colTop.length
-  const height = (top, bottom) => Math.floor(bottom) - Math.ceil(top) + 1
-  let first = 0, last = n - 1
-  while (first < n && !(colTop[first] <= colBottom[first])) first++
-  while (last > first && !(colTop[last] <= colBottom[last])) last--
-  let best = 0, bestL = 0, bestR = -1
-  for (let l = first; l <= last; l++) {
-    if ((last - l + 1) * height(colTop[l], colBottom[l]) <= best) continue
-    let top = -Infinity, bottom = Infinity
-    for (let r = l; r <= last; r++) {
-      if (colTop[r] > top) top = colTop[r]
-      if (colBottom[r] < bottom) bottom = colBottom[r]
-      const h = height(top, bottom)
-      if (!(h > 0) || (last - l + 1) * h <= best) break
-      if ((r - l + 1) * h > best) {
-        best = (r - l + 1) * h
-        bestL = l
-        bestR = r
-      }
-    }
-  }
-  const tops = new Float64Array(n).fill(Infinity), bottoms = new Float64Array(n).fill(-Infinity)
-  tops.set(colTop.subarray(bestL, bestR + 1), bestL)
-  bottoms.set(colBottom.subarray(bestL, bestR + 1), bestL)
-  return [tops, bottoms]
-}
-
 // Spec §4.4 step 6, simplified to a chain. On a pre-pass grid at GAIN_SCALE of the output, mean_i and mean_i+1 are
-// the mean lumas of photos i and i+1 (from GAIN_SCALE thumbnails) over the grid points both see with weight > 0;
-// g_0 = 1 and g_i+1 = g_i · mean_i / mean_i+1. A pair with no overlap (or a near-black mean_i+1) carries the gain over.
+// the mean lumas of photos i and i+1 (from GAIN_SCALE thumbnails) over the grid points both see with weight > 0,
+// leaving out points where either luma is outside GAIN_LUMA (clipped, so not proportional to exposure);
+// g_0 = 1 and g_i+1 = g_i · clamp(mean_i / mean_i+1, GAIN_STEP). A pair with no such points (or a near-black
+// mean_i+1) carries the gain over.
 function gainChain(f, Rs, photoBounds, grid) {
   const windows = photoBounds.map((b) => gridWindow(b, grid))
   const thumbWidth = Math.max(1, Math.round(cfg.width * GAIN_SCALE))
+  const [lo, hi] = GAIN_LUMA
   const gains = [1]
   let a = toThumb(photos[0].bitmap, thumbWidth)
   for (let i = 0; i + 1 < Rs.length; i++) {
@@ -396,15 +398,17 @@ function gainChain(f, Rs, photoBounds, grid) {
         fillColumn(Rs[i], f, grid, X, y0, n, ax, ay, 0, 1)
         fillColumn(Rs[i + 1], f, grid, X, y0, n, bx, by, 0, 1)
         for (let k = 0; k < n; k++) {
-          if (edgeWeight(ax[k], ay[k]) > 0 && edgeWeight(bx[k], by[k]) > 0) {
-            sumA += lumaAt(a, ax[k], ay[k])
-            sumB += lumaAt(b, bx[k], by[k])
-            count++
-          }
+          if (!(edgeWeight(ax[k], ay[k]) > 0 && edgeWeight(bx[k], by[k]) > 0)) continue
+          const la = lumaAt(a, ax[k], ay[k]), lb = lumaAt(b, bx[k], by[k])
+          if (la < lo || la > hi || lb < lo || lb > hi) continue
+          sumA += la
+          sumB += lb
+          count++
         }
       }
     }
-    gains.push(count > 0 && sumB > count ? gains[i] * sumA / sumB : gains[i])
+    const ratio = Math.min(GAIN_STEP[1], Math.max(GAIN_STEP[0], sumA / sumB))
+    gains.push(count > 0 && sumB > count ? gains[i] * ratio : gains[i])
     a = b
   }
   return gains
@@ -449,11 +453,17 @@ function warpInto(photo, R, f, grid, win, x0, sw, gain, acc, wsum) {
   }
 }
 
-// The photo's RGBA pixels as a CV_8UC4 Mat, made on first use.
+// The photo's RGBA pixels as a CV_8UC4 Mat, made on first use through the one reused scratch canvas.
 function sourceMat(photo) {
   if (!photo.mat) {
     const { width, height } = cfg
-    const ctx = new OffscreenCanvas(width, height).getContext('2d', { willReadFrequently: true })
+    scratch ??= new OffscreenCanvas(width, height)
+    if (scratch.width !== width || scratch.height !== height) {
+      scratch.width = width
+      scratch.height = height
+    }
+    const ctx = scratch.getContext('2d', { willReadFrequently: true })
+    ctx.clearRect(0, 0, width, height)
     ctx.drawImage(photo.bitmap, 0, 0, width, height)
     photo.mat = cv.matFromImageData(ctx.getImageData(0, 0, width, height))
   }
