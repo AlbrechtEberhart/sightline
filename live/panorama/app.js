@@ -18,6 +18,7 @@ const SETTINGS_KEY = 'live-panorama-settings'
 const BUSY_KEY = 'sightline-pano-busy'
 const ZOOM_CHOICES = [1, 1.5, 2]
 const STRIP_HEIGHT = 64
+const STAGE_WORDS = { match: 'Matching photos', warp: 'Warping', blend: 'Blending', encode: 'Saving' }
 
 const $ = (id) => document.getElementById(id)
 const el = {
@@ -48,6 +49,7 @@ const saver = createSaveControls({
 // ---------- state and small UI helpers ----------
 function setState(state) {
   pano.state = state
+  document.querySelector('.app').dataset.state = state
   const capturing = state === 'capturing'
   el.start.hidden = state !== 'loading' && state !== 'ready'
   el.start.disabled = state !== 'ready'
@@ -183,15 +185,15 @@ function addStripThumb(image) {
 }
 
 async function captureLoop(s, src) {
-  const { width, height } = src.meta
   for await (const f of src.frames()) {
     try {
       if (s.over) break
       if (document.hidden || !f.motion) continue // hidden page or no gyroscope reading yet: skip
-      if (f.image.displayWidth !== width || f.image.displayHeight !== height) continue // phone rotated mid-capture
+      if (f.image.displayWidth !== s.width || f.image.displayHeight !== s.height) { setWarning('Keep the phone the same way up'); continue }
       const r = s.rules.update({ ...f.motion, sharpness: sharpness(toThumb(f.image)) })
       if (r.shoot) {
         const bitmap = await createImageBitmap(f.image)
+        if (s.over) { bitmap.close(); break }
         s.stitcher.add(bitmap, { yawHint: f.motion.yaw })
         addStripThumb(f.image)
         s.photos = pano.photos = r.count
@@ -229,12 +231,13 @@ async function onStart() {
   motion.start()
   motion.zero()
 
-  const { width, height } = source.meta
+  const width = source.video.videoWidth || source.meta.width // live size: the phone may have been rotated since open
+  const height = source.video.videoHeight || source.meta.height
   const zoom = settings.zoom
   const hfovDeg = displayedHfov({ lens: 'wide', width, height, zoom })
   const s = session = {
     rules: createCaptureRules({ hfovDeg, maxPhotos: maxPhotosFor(hfovDeg) }),
-    stitcher: null, creating: null, photos: 0, ending: false, over: false,
+    stitcher: null, creating: null, photos: 0, ending: false, over: false, width, height,
   }
   pano.photos = 0
   el.strip.replaceChildren()
@@ -244,7 +247,9 @@ async function onStart() {
   setStatus('Starting…')
   s.creating = Stitcher.create({
     opencvBytes, focalPx: focalPx({ lens: 'wide', width, height, zoom }), width, height, mode: 'live',
-    onProgress: (stage, done, total) => setStatus(`Stitching: ${stage} ${done}/${total}`),
+    onProgress: (stage, done, total) => {
+      if (pano.state === 'stitching') setStatus(`${STAGE_WORDS[stage] || 'Stitching'}… ${done}/${total}`)
+    },
   })
   try {
     s.stitcher = await s.creating
@@ -348,3 +353,4 @@ async function boot() {
   maybeReady()
 }
 boot()
+window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload() }) // bfcache restore has a dead camera

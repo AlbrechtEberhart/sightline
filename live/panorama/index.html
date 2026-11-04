@@ -52,10 +52,11 @@
   .live .loading { margin: 0 24px; text-align: center; color: var(--muted); }
   .live .loading .progress { margin-top: 8px; }
   .live .result {
-    position: absolute; inset: 0; z-index: 5; background: var(--bg); display: flex; flex-direction: column;
+    position: absolute; inset: 0; z-index: 2; background: var(--bg); display: flex; flex-direction: column;
     gap: 10px; padding: calc(60px + var(--sat)) 12px calc(40px + var(--sab));
   }
   .live .result[hidden] { display: none; }
+  .live[data-state="result"] .readout { display: none; }
   .live .result .scroll { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
   .live .result img { height: 100%; width: auto; max-width: none; display: block; }
   .live .result .notes { margin: 0; color: var(--muted); font-size: 13px; }

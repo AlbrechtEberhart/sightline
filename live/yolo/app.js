@@ -380,3 +380,4 @@ syncSettingsUi()
 if (clipUrl) el.lens.hidden = true
 requestAnimationFrame(drawFrame)
 serial(boot)
+window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload() }) // bfcache restore has a dead camera

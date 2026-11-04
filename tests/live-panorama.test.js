@@ -53,3 +53,20 @@ test('live-panorama: page loads with the tool switch', async () => {
     assert(doc.querySelector('.tool-switch a[href="../yolo/"]'), 'YOLO link')
   } finally { f.remove() }
 })
+
+test('live-panorama: Done before any photo shows Not enough turning and returns to ready', async () => {
+  const f = document.createElement('iframe'); f.style.width = '390px'; f.style.height = '844px'
+  f.src = new URL('../live/panorama/?source=file&clip=../../tests/fixtures/bus-3s.mp4', import.meta.url); document.body.append(f)
+  const until = async (fn) => { for (let i = 0; i < 160; i++) { if (fn()) return true; await new Promise(r => setTimeout(r, 500)) } return false }
+  try {
+    assert(await until(() => f.contentWindow.__pano?.state === 'ready'), 'ready')
+    const doc = f.contentDocument
+    // Some desktop browsers (the test pane included) expose requestPermission and answer 'denied': pin it to 'granted'.
+    for (const E of [f.contentWindow.DeviceOrientationEvent, f.contentWindow.DeviceMotionEvent]) if (E) E.requestPermission = async () => 'granted'
+    doc.getElementById('start').click()
+    assert(await until(() => f.contentWindow.__pano.state === 'capturing'), 'capturing')
+    doc.getElementById('done').click()
+    assert(await until(() => /Not enough turning/.test(doc.getElementById('errors').innerText)), 'Not enough turning card')
+    assertEqual(f.contentWindow.__pano.state, 'ready')
+  } finally { f.remove() }
+})
