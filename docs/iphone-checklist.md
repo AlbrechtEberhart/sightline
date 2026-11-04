@@ -43,9 +43,11 @@ Live (`live/panorama/`):
 - [ ] Turning slowly takes photos automatically, and the strip fills. Turning too fast or a blurry view shows a warning.
 - [ ] A 5–8 photo outdoor panorama stitches with no visible seams.
 - [ ] **Zoom** (1×, 1.5×, 2×) is shown only if Safari exposes camera zoom, and hidden otherwise. A 2× panorama works, and the choice is remembered on the next visit.
-- [ ] Holding the phone upright, the capture stops at 12 photos. Note the time and whether memory holds at 12 photos.
+- [ ] Holding the phone upright, a full sweep passes 180° and the capture stops by itself at 11 or 12 photos. Note the time and whether memory holds at 12 photos.
 - [ ] Holding the phone in landscape, the capture stops at 7 photos.
 - [ ] Rotating the phone mid-capture shows "Keep the phone the same way up" and skips frames until it is turned back.
+- [ ] Switching apps mid-capture, then returning: capture continues (or **Done** stitches the photos taken so far).
+- [ ] Pinch-zoom works on the result image.
 - [ ] **Share…** and **Save file** work with the JPEG.
 - [ ] Navigating Panorama → YOLO → Back works, and the Panorama page reloads cleanly.
 
@@ -53,6 +55,8 @@ Studio (`recorded/panorama/`):
 
 - [ ] A slow-pan clip filmed on the phone: choose it, pick the Lens, tap **Scan**, then **Stitch**. The result looks right.
 - [ ] Switching apps mid-scan, then returning, finishes the scan.
+- [ ] A 4K slow-pan clip scans and stitches without the tab reloading.
+- [ ] Pinch-zoom works on the result image.
 - [ ] **Share…** and **Save file** work with the JPEG.
 - [ ] Navigating Panorama → YOLO → Back works.
 
