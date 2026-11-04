@@ -10,6 +10,13 @@ export const MODEL_URLS = {
   640: new URL('../models/yolo11n-640.onnx', import.meta.url),
 }
 
+// OpenCV.js for Panorama. Task 3 fills in the real size and SHA-256 once the file is vendored.
+export const OPENCV_ASSET = {
+  url: new URL('./vendor/opencv/opencv.js', import.meta.url),
+  bytes: 0,
+  sha256: '',
+}
+
 function downloadError(message, cause) {
   const e = new Error(message)
   e.name = 'ModelDownloadError'
@@ -53,8 +60,8 @@ async function readBody(res, onProgress) {
   return out
 }
 
-// Returns an error message if the response/bytes are not a plausible complete model, else null.
-function problemWith(res, bytes) {
+// Returns an error message if the response/bytes are not a plausible complete file, else null.
+function problemWith(res, bytes, minBytes = MIN_MODEL_BYTES) {
   const total = totalOf(res)
   // With Content-Encoding (gzip/br), Content-Length is the compressed size, so skip the comparison.
   if (total && bytes.byteLength < total && !res.headers.get('Content-Encoding')) {
@@ -63,9 +70,25 @@ function problemWith(res, bytes) {
   if ((res.headers.get('Content-Type') || '').toLowerCase().includes('text/html')) {
     return 'unexpected text/html response'
   }
-  if (bytes.byteLength < MIN_MODEL_BYTES) {
+  if (bytes.byteLength < minBytes) {
     return `body too small (${bytes.byteLength} bytes)`
   }
+  return null
+}
+
+async function sha256Hex(bytes) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Response checks plus the pinned size and SHA-256 (0 / '' mean "not checked"). Returns a message or null.
+async function assetProblem(res, bytes, { bytes: size = 0, sha256 = '', minBytes }) {
+  const problem = problemWith(res, bytes, minBytes)
+  if (problem) return problem
+  if (size && bytes.byteLength !== size) {
+    return `size mismatch (${bytes.byteLength} bytes, expected ${size})`
+  }
+  if (sha256 && await sha256Hex(bytes) !== sha256.toLowerCase()) return 'hash mismatch'
   return null
 }
 
@@ -75,8 +98,10 @@ export function validateDownload(res, bytes) {
   if (problem) throw downloadError(`Model download invalid: ${problem}`)
 }
 
-export async function fetchModel(url, onProgress) {
+// Downloads a file (cached in Cache Storage) and checks it. Bytes that fail a check are never cached or returned.
+export async function fetchAsset(url, { bytes: size = 0, sha256 = '', minBytes = MIN_MODEL_BYTES, onProgress } = {}) {
   const href = typeof url === 'string' ? url : url.href
+  const expect = { bytes: size, sha256, minBytes }
   const cache = await openCache()
 
   if (cache) {
@@ -84,7 +109,7 @@ export async function fetchModel(url, onProgress) {
       const hit = await cache.match(href)
       if (hit) {
         const bytes = await readBody(hit.clone(), null)
-        if (!problemWith(hit, bytes)) {
+        if (!await assetProblem(hit, bytes, expect)) {
           if (onProgress) onProgress(bytes.byteLength, bytes.byteLength)
           return bytes
         }
@@ -105,7 +130,7 @@ export async function fetchModel(url, onProgress) {
     throw downloadError(`Model download failed (${href}): ${e && e.message}`, e)
   }
 
-  const problem = problemWith(res, bytes)
+  const problem = await assetProblem(res, bytes, expect)
   if (problem) throw downloadError(`Model download failed (${href}): ${problem}`)
 
   if (cache) {
@@ -120,6 +145,10 @@ export async function fetchModel(url, onProgress) {
     } catch { /* caching is best-effort */ }
   }
   return bytes
+}
+
+export function fetchModel(url, onProgress) {
+  return fetchAsset(url, { onProgress })
 }
 
 export async function createSession(bytes, { backend = 'auto' } = {}) {

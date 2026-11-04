@@ -3,7 +3,7 @@
 // is a cheap 304), which means a phone gets fresh code right after every deploy, and Live
 // and Studio, which share modules, never run a mix of old and new versions. The cache is
 // only the offline fallback.
-// .onnx models are cached by models.js; Range requests must hit the network.
+// .onnx models and opencv.js are cached (and, for opencv.js, checked) by models.js; Range requests must hit the network.
 const CACHE = 'cv-shell-v1'
 
 self.addEventListener('install', () => self.skipWaiting())
@@ -17,7 +17,9 @@ self.addEventListener('activate', (event) => {
 })
 
 function cacheable(url) {
-  return url.origin === self.location.origin && !url.pathname.endsWith('.onnx')
+  return url.origin === self.location.origin &&
+    !url.pathname.endsWith('.onnx') &&
+    !url.pathname.endsWith('/vendor/opencv/opencv.js')
 }
 
 // Only store complete, same-origin (basic) 200 responses.
