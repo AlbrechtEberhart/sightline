@@ -7,7 +7,7 @@ import { createCaptureRules, maxPhotosFor } from '../../core/stitch/capture.js'
 import { toThumb } from '../../core/stitch/thumb.js'
 import { sharpness } from '../../core/stitch/sharpness.js'
 import { focalPx, displayedHfov } from '../../core/stitch/camera-model.js'
-import { Stitcher } from '../../core/stitch/stitcher.js'
+import { Stitcher, photoSize, photoBitmap } from '../../core/stitch/stitcher.js'
 import { fetchAsset, OPENCV_ASSET } from '../../shared/models.js'
 import { createSaveControls } from '../../shared/save.js'
 import { createWakeLock } from '../../shared/wake-lock.js'
@@ -19,12 +19,15 @@ const BUSY_KEY = 'sightline-pano-busy'
 const ZOOM_CHOICES = [1, 1.5, 2]
 const STRIP_HEIGHT = 64
 const STAGE_WORDS = { match: 'Matching photos', warp: 'Warping', blend: 'Blending', encode: 'Saving' }
+const MAX_SWEEP_DEG = 335 // capture stops 5 degrees under the stitch worker's 340 degree cap
+const MOTION_WAIT_MS = 3000 // no gyroscope reading this long into capture: say so
+const WAITING_MOTION = 'Waiting for the motion sensor…'
 
 const $ = (id) => document.getElementById(id)
 const el = {
-  viewport: $('viewport'), zoom: $('zoom'), status: $('status'), warning: $('warning'), strip: $('strip'),
-  start: $('start'), done: $('done'), cancel: $('cancel'), loading: $('loading'), loadingText: $('loading-text'),
-  bar: $('bar'), errors: $('errors'), result: $('result'), img: $('pano-img'), notes: $('notes'),
+  viewport: $('viewport'), guide: $('guide'), zoom: $('zoom'), status: $('status'), warning: $('warning'),
+  strip: $('strip'), start: $('start'), done: $('done'), cancel: $('cancel'), loading: $('loading'),
+  loadingText: $('loading-text'), bar: $('bar'), errors: $('errors'), result: $('result'), img: $('pano-img'), notes: $('notes'),
   share: $('share'), saveFile: $('save-file'), again: $('new'),
 }
 const params = new URLSearchParams(location.search)
@@ -62,9 +65,14 @@ function setState(state) {
   if (state === 'loading') setStatus('Starting…')
   else if (state === 'ready') setStatus('Ready. Tap Start, then turn slowly.')
   else if (state === 'stitching') setStatus('Stitching…')
-  if (state !== 'capturing') setWarning(null)
+  if (state !== 'capturing') { setWarning(null); setGuide(0) }
 }
 function setStatus(text) { el.status.textContent = text }
+// direction: 0 (not set yet) hides the guide; 1 / -1 shows the arrow pointing right / left.
+function setGuide(direction) {
+  el.guide.hidden = !direction
+  if (direction) el.guide.dataset.direction = direction > 0 ? 'right' : 'left'
+}
 function setWarning(text) {
   if (text === pano.warning) return
   pano.warning = text
@@ -185,20 +193,28 @@ function addStripThumb(image) {
 }
 
 async function captureLoop(s, src) {
+  const started = performance.now()
+  let waiting = false // showing WAITING_MOTION
   for await (const f of src.frames()) {
     try {
       if (s.over) break
-      if (document.hidden || !f.motion) continue // hidden page or no gyroscope reading yet: skip
+      if (document.hidden) continue
+      if (!f.motion) { // no gyroscope reading yet: skip, and say so after a while
+        if (!waiting && performance.now() - started > MOTION_WAIT_MS) { waiting = true; setStatus(WAITING_MOTION) }
+        continue
+      }
+      if (waiting) { waiting = false; setStatus(s.photos ? `Photos: ${s.photos}` : 'Turn slowly') }
       if (f.image.displayWidth !== s.width || f.image.displayHeight !== s.height) { setWarning('Keep the phone the same way up'); continue }
       const r = s.rules.update({ ...f.motion, sharpness: sharpness(toThumb(f.image)) })
       if (r.shoot) {
-        const bitmap = await createImageBitmap(f.image)
+        const bitmap = await photoBitmap(f.image, s.photo)
         if (s.over) { bitmap.close(); break }
-        s.stitcher.add(bitmap, { yawHint: f.motion.yaw })
+        s.stitcher.add(bitmap, { yawHint: s.rules.photosYaw[r.count - 1] }) // unwrapped: the sweep may pass 180
         addStripThumb(f.image)
         s.photos = pano.photos = r.count
         setStatus(`Photos: ${r.count}`)
       }
+      setGuide(r.direction)
       setWarning(r.warning)
       if (r.done) { endSession('done'); break }
     } finally {
@@ -228,16 +244,16 @@ async function onStart() {
   if (pano.state !== 'ready') return
   clearErrors()
   saver.clear()
-  motion.start()
-  motion.zero()
+  motion.start() // zeroed when capture starts, so turning during "Starting…" cannot set the direction
 
   const width = source.video.videoWidth || source.meta.width // live size: the phone may have been rotated since open
   const height = source.video.videoHeight || source.meta.height
+  const photo = photoSize({ width, height }) // shots over 1920 px are stitched downscaled
   const zoom = settings.zoom
   const hfovDeg = displayedHfov({ lens: 'wide', width, height, zoom })
   const s = session = {
-    rules: createCaptureRules({ hfovDeg, maxPhotos: maxPhotosFor(hfovDeg) }),
-    stitcher: null, creating: null, photos: 0, ending: false, over: false, width, height,
+    rules: createCaptureRules({ hfovDeg, maxPhotos: maxPhotosFor(hfovDeg), maxSweepDeg: MAX_SWEEP_DEG }),
+    stitcher: null, creating: null, photos: 0, ending: false, over: false, width, height, photo,
   }
   pano.photos = 0
   el.strip.replaceChildren()
@@ -246,7 +262,7 @@ async function onStart() {
   setState('capturing')
   setStatus('Starting…')
   s.creating = Stitcher.create({
-    opencvBytes, focalPx: focalPx({ lens: 'wide', width, height, zoom }), width, height, mode: 'live',
+    opencvBytes, focalPx: focalPx({ lens: 'wide', ...photo, zoom }), ...photo, mode: 'live',
     onProgress: (stage, done, total) => {
       if (pano.state === 'stitching') setStatus(`${STAGE_WORDS[stage] || 'Stitching'}… ${done}/${total}`)
     },
@@ -261,6 +277,7 @@ async function onStart() {
     return
   }
   if (s.ending || session !== s) return // Done or Cancel was tapped while the stitcher started: endSession takes over
+  motion.zero()
   setStatus('Turn slowly')
   captureLoop(s, source).catch((err) => {
     if (session !== s || s.ending) return

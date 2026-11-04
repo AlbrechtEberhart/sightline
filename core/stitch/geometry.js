@@ -5,7 +5,9 @@
 // - An absolute rotation R maps camera rays to world rays. Photo 0 has R = I.
 // - Yaw is positive turning right (about world y), pitch is positive looking up, roll is about the view axis.
 // - For neighbours i and j, H maps image-i pixels to image-j pixels and Rij = K^-1 H K (made orthonormal),
-//   so R_j = R_i * Rij^T.
+//   so R_j = R_i * Rij^T. The worker estimates Rij by a Kabsch fit on the RANSAC inlier rays (b ≈ Rij·a for
+//   a = K^-1 x_i, b = K^-1 x_j, normalised), which is consistent with that relation; rotationFromHomography is the
+//   K^-1 H K route.
 
 const RAD = Math.PI / 180
 const DEG = 180 / Math.PI
@@ -144,7 +146,8 @@ export function nearestRotation(M) {
   return mul(flipped, Vt)
 }
 
-// Rij = K^-1 H K for H mapping image-i pixels to image-j pixels, made orthonormal.
+// Rij = K^-1 H K for H mapping image-i pixels to image-j pixels, made orthonormal. (stitch-worker.js estimates the same
+// Rij by a Kabsch fit on the RANSAC inlier rays, b ≈ Rij·a, which is consistent with this relation.)
 // H is only defined up to scale, so a negative-determinant result is negated before the polar step removes the
 // positive scale.
 export function rotationFromHomography(H, f, cx, cy) {

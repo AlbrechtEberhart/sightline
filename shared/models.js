@@ -37,8 +37,10 @@ function totalOf(res) {
   return Number(res.headers.get('Content-Length')) || 0
 }
 
-async function readBody(res, onProgress) {
-  const total = totalOf(res)
+// knownTotal (the pinned size) wins over Content-Length, which is the compressed size (or missing) when the server
+// gzips the file, as GitHub Pages does for .js.
+async function readBody(res, onProgress, knownTotal = 0) {
+  const total = knownTotal || totalOf(res)
   if (!res.body || !res.body.getReader) {
     const buf = new Uint8Array(await res.arrayBuffer())
     if (onProgress) onProgress(buf.byteLength, total || buf.byteLength)
@@ -124,7 +126,7 @@ export async function fetchAsset(url, { bytes: size = 0, sha256 = '', minBytes =
   try {
     res = await fetch(href)
     if (!res.ok) throw downloadError(`Model download failed (${href}): HTTP ${res.status}`)
-    bytes = await readBody(res, onProgress)
+    bytes = await readBody(res, onProgress, size)
   } catch (e) {
     if (e && e.name === 'ModelDownloadError') throw e
     throw downloadError(`Model download failed (${href}): ${e && e.message}`, e)

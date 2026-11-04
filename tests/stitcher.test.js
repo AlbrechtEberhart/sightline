@@ -231,3 +231,29 @@ test('stitcher: synthetic fixture is deterministic', async () => {
   for (let i = 0; i < pa.length; i += 4) sum += pa[i]
   assert(sum > 0, 'view is not blank')
 })
+
+test('stitcher: upright (portrait) views in live mode', async () => {
+  const PW = 360, PH = 640
+  const f = focalPx({ lens: 'wide', width: PW, height: PH })
+  const tall = makeScene({ f, height: Math.round(2 * f * Math.tan(40 * RAD)) }) // covers the 67 degree vertical view
+  const yaws = [0, 26, 52, 78]
+  const s = await Stitcher.create({ opencvBytes: await opencvBytes(), focalPx: f, width: PW, height: PH, mode: 'live' })
+  for (const yawDeg of yaws) {
+    s.add(await createImageBitmap(renderView(tall, { yawDeg, pitchDeg: PITCH, width: PW, height: PH })), { yawHint: yawDeg })
+  }
+  const r = await s.finish()
+  assertEqual(r.used, 4)
+  assertEqual(r.notes, [])
+  r.yaws.forEach((y, i) => assert(Math.abs(y - yaws[i]) < 0.3, `yaw ${i}: ${y} vs ${yaws[i]}`))
+})
+
+test('stitcher: leftward sweep in studio mode', async () => {
+  const left = makeScene({ f: F, yawRange: [-170, 50] })
+  const yaws = [0, -40, -80, -120]
+  const s = await stitcher('studio')
+  for (const yawDeg of yaws) s.add(await createImageBitmap(renderView(left, { yawDeg, pitchDeg: PITCH, width: W, height: H })))
+  const r = await s.finish()
+  assertEqual(r.used, 4)
+  assertEqual(r.notes, [])
+  r.yaws.forEach((y, i) => assert(Math.abs(y - yaws[i]) < 0.3, `yaw ${i}: ${y} vs ${yaws[i]}`))
+})

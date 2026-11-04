@@ -79,3 +79,23 @@ test('models: fetchAsset accepts the right hash', async () => {
   assertEqual(await sha256Hex(got), await sha256Hex(expected))
   await uncache(busUrl)
 })
+test('models: fetchAsset progress uses the known size when Content-Length is the compressed size', async () => {
+  const url = new URL('./fixtures/bus.jpg?gzip-progress', import.meta.url)
+  await uncache(url)
+  const body = new Uint8Array(await (await fixture('bus.jpg')).arrayBuffer())
+  const realFetch = globalThis.fetch
+  // A gzipped GitHub Pages response: Content-Length is the compressed size, and the body arrives in chunks.
+  globalThis.fetch = async () => new Response(new ReadableStream({
+    start(c) { for (let o = 0; o < body.byteLength; o += 4096) c.enqueue(body.slice(o, o + 4096)); c.close() },
+  }), { headers: { 'Content-Type': 'image/jpeg', 'Content-Encoding': 'gzip', 'Content-Length': '1000' } })
+  const calls = []
+  try {
+    await fetchAsset(url, { minBytes: 0, bytes: body.byteLength, onProgress: (loaded, total) => calls.push([loaded, total]) })
+  } finally {
+    globalThis.fetch = realFetch
+    await uncache(url)
+  }
+  assert(calls.length > 1, `progress calls ${calls.length}`)
+  assert(calls.every(([loaded, total]) => total === body.byteLength && loaded <= total), JSON.stringify(calls.slice(0, 3)))
+  assertEqual(calls.at(-1), [body.byteLength, body.byteLength])
+})

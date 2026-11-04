@@ -4,7 +4,7 @@ import '../../shared/register-sw.js'
 import { FileVideoSource } from '../video-source.js'
 import { scanClip } from './scan.js'
 import { focalPx } from '../../core/stitch/camera-model.js'
-import { Stitcher } from '../../core/stitch/stitcher.js'
+import { Stitcher, photoSize } from '../../core/stitch/stitcher.js'
 import { fetchAsset, OPENCV_ASSET } from '../../shared/models.js'
 import { createSaveControls } from '../../shared/save.js'
 import { createWakeLock } from '../../shared/wake-lock.js'
@@ -191,7 +191,7 @@ async function onScan() {
   studio.picked = 0
   studio.messages = []
   setNotes([])
-  const { width, height } = source.meta
+  const { width, height } = photoSize(source.meta) // frames over 1920 px are stitched downscaled
   const r = run = { ac: new AbortController(), stitcher: null, creating: null, over: false }
   setBusy(true)
   wake.acquire()

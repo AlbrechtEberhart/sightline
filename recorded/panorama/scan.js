@@ -1,11 +1,13 @@
 // Studio panorama scan: reads a recorded clip forward once, asks the frame picker which sharp frames each add new
-// scene, and hands those frames to the stitcher. Only the frames the picker holds are kept as ImageBitmaps.
+// scene, and hands those frames to the stitcher. Only the frames the picker holds are kept as ImageBitmaps, downscaled
+// to at most 1920 px on the long side (photoSize).
 // When the page is hidden the current decoder run is ended (iOS reclaims the decoder on suspend); the picker, the held
 // bitmaps and the previous thumbnail are kept, and the scan resumes at the next frame once the page is visible.
 import { toThumb } from '../../core/stitch/thumb.js'
 import { sharpness } from '../../core/stitch/sharpness.js'
 import { phaseShift } from '../../core/stitch/shift.js'
 import { createFramePicker } from '../../core/stitch/select.js'
+import { photoSize, photoBitmap } from '../../core/stitch/stitcher.js'
 
 const MAX_PHOTOS = 12
 const abortError = () => new DOMException('Cancelled', 'AbortError')
@@ -28,7 +30,7 @@ const pageVisibility = {
 
 /**
  * @param source FileVideoSource
- * @param opts.stitcher a created studio Stitcher; picks are added to it as they are found
+ * @param opts.stitcher a created studio Stitcher, sized photoSize(source.meta); picks are added to it as they are found
  * @param opts.onProgress (fraction 0..1) as frames are read
  * @param opts.onPick (bitmap) called just before a pick is handed to the stitcher (the bitmap is transferred after)
  * @param opts.signal AbortSignal: closes every held bitmap and throws an AbortError
@@ -39,6 +41,7 @@ const pageVisibility = {
  */
 export async function scanClip(source, { stitcher, onProgress, onPick, signal, visibility = pageVisibility } = {}) {
   const { width, frameCount, duration } = source.meta
+  const size = photoSize(source.meta) // held frames are downscaled to the size the stitcher was created with
   const picker = createFramePicker({ width, maxPhotos: MAX_PHOTOS })
   const held = new Map() // frame index -> ImageBitmap
   const used = []
@@ -71,7 +74,7 @@ export async function scanClip(source, { stitcher, onProgress, onPick, signal, v
             prev = thumb
             next = index + 1
             const r = picker.push({ index, dx, sharpness: sharpness(thumb) })
-            if (r.hold) held.set(index, await createImageBitmap(image))
+            if (r.hold) held.set(index, await photoBitmap(image, size))
             for (const i of r.release) { held.get(i)?.close(); held.delete(i) }
             if (r.pick !== null && r.pick !== undefined) send(r.pick)
             onProgress?.(frameCount > 0 ? (index + 1) / frameCount : duration > 0 ? Math.min(1, t / duration) : 0)

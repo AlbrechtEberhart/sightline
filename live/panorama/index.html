@@ -47,6 +47,15 @@
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 8px;
     background: linear-gradient(rgba(11,18,32,0), rgba(11,18,32,.8));
   }
+  /* Direction guide: a centre line and an arrow over the camera, under every bar, card and the result (z 1). */
+  .live .guide { position: absolute; left: 0; right: 0; top: 50%; height: 0; z-index: 1; pointer-events: none; }
+  .live .guide[hidden] { display: none; }
+  .live .guide-line { position: absolute; left: 12px; right: 12px; top: -1px; height: 2px; background: rgba(255,255,255,.7); }
+  .live .guide-arrow {
+    position: absolute; top: -18px; right: 20px; width: 56px; height: 36px; color: var(--accent);
+    filter: drop-shadow(0 0 3px rgba(11,18,32,.8));
+  }
+  .live .guide[data-direction="left"] .guide-arrow { right: auto; left: 20px; transform: scaleX(-1); }
   .live .overlay { position: absolute; inset: 0; z-index: 4; display: grid; align-content: center; pointer-events: none; }
   .live .overlay > * { pointer-events: auto; }
   .live .loading { margin: 0 24px; text-align: center; color: var(--muted); }
@@ -72,6 +81,10 @@
   </div>
 
   <div id="viewport" class="viewport"></div>
+  <div id="guide" class="guide" aria-hidden="true" hidden>
+    <div class="guide-line"></div>
+    <svg class="guide-arrow" viewBox="0 0 56 36"><path d="M4 18h44M34 6l14 12-14 12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
 
   <div class="readout">
     <div id="status" class="status" aria-live="polite">Starting…</div>

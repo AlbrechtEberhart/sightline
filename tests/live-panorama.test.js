@@ -25,7 +25,7 @@ test('live-panorama: capture rules plus stitcher on a scripted sweep', async () 
       const r = rules.update({ yaw, pitch: 0, roll: 0, rate: 20, sharpness: sharpness(toThumb(view)) })
       if (r.shoot) {
         shots.push(yaw)
-        stitcher.add(await createImageBitmap(view), { yawHint: yaw })
+        stitcher.add(await createImageBitmap(view), { yawHint: rules.photosYaw.at(-1) }) // unwrapped, as Live passes it
       }
     }
     assertEqual(shots, [0, 44, 88])
@@ -68,5 +68,78 @@ test('live-panorama: Done before any photo shows Not enough turning and returns 
     doc.getElementById('done').click()
     assert(await until(() => /Not enough turning/.test(doc.getElementById('errors').innerText)), 'Not enough turning card')
     assertEqual(f.contentWindow.__pano.state, 'ready')
+  } finally { f.remove() }
+})
+
+// Opens the Live panorama page on the debug clip, waits for ready and pins the motion permission to 'granted'.
+async function openLivePage() {
+  const f = document.createElement('iframe'); f.style.width = '390px'; f.style.height = '844px'
+  f.src = new URL('../live/panorama/?source=file&clip=../../tests/fixtures/bus-3s.mp4', import.meta.url); document.body.append(f)
+  const until = async (fn, tries = 160) => { for (let i = 0; i < tries; i++) { if (fn()) return true; await new Promise(r => setTimeout(r, 250)) } return false }
+  if (!await until(() => f.contentWindow.__pano?.state === 'ready')) { f.remove(); throw new Error('page not ready') }
+  for (const E of [f.contentWindow.DeviceOrientationEvent, f.contentWindow.DeviceMotionEvent]) if (E) E.requestPermission = async () => 'granted'
+  const turnTo = (alpha) => f.contentWindow.dispatchEvent(Object.assign(new f.contentWindow.Event('deviceorientation'), { alpha, beta: 90, gamma: 0 }))
+  return { f, doc: f.contentDocument, until, turnTo }
+}
+
+test('live-panorama: turning while Starting does not set the direction; the guide arrow shows it once set', async () => {
+  const { f, doc, until, turnTo } = await openLivePage()
+  let hold = null
+  try {
+    const guide = doc.getElementById('guide'), status = doc.getElementById('status')
+    // Turn 40 degrees left as soon as capture state is entered: the observer runs as a microtask, before the
+    // stitcher (a worker plus OpenCV start-up) can have settled, so this is always during "Starting…". The pose is
+    // then held with an event every 50 ms, as a phone's sensor streams them (desktop Chrome also sends one null
+    // reading when the listener is added).
+    const app = doc.querySelector('.app')
+    const turnedWhileStarting = new Promise((resolve) => {
+      const mo = new f.contentWindow.MutationObserver(() => {
+        if (app.dataset.state !== 'capturing') return
+        mo.disconnect()
+        const during = status.textContent
+        turnTo(0)
+        turnTo(40)
+        hold = setInterval(() => turnTo(40), 50)
+        resolve(during)
+      })
+      mo.observe(app, { attributes: true, attributeFilter: ['data-state'] })
+    })
+    doc.getElementById('start').click()
+    assertEqual(await turnedWhileStarting, 'Starting…')
+    assert(guide.hidden, 'guide hidden while Starting')
+    assert(await until(() => status.textContent !== 'Starting…'), 'capture loop started')
+    await new Promise(r => setTimeout(r, 1000))
+    clearInterval(hold)
+    assert(guide.hidden, 'the turn made during Starting did not set a direction')
+    turnTo(30) // 10 degrees right of where capture started
+    assert(await until(() => !guide.hidden), 'guide shown once the direction is set')
+    assertEqual(guide.dataset.direction, 'right')
+    // The guide sits under the bars and cards: it is below them in z-order and clear of the readout and controls.
+    const z = (sel) => Number(f.contentWindow.getComputedStyle(doc.querySelector(sel)).zIndex)
+    assert(z('#guide') < Math.min(z('.topbar'), z('.readout'), z('.controls'), z('.footer-disclaimer'), z('.overlay')), 'guide z-order')
+    const g = doc.querySelector('.guide-arrow').getBoundingClientRect() // the tallest part; the line is at its middle
+    for (const sel of ['.topbar', '.readout', '.controls', '.footer-disclaimer', '#strip']) {
+      const r = doc.querySelector(sel).getBoundingClientRect()
+      assert(g.bottom <= r.top || g.top >= r.bottom, `guide clear of ${sel}`)
+    }
+    doc.getElementById('cancel').click()
+    assert(await until(() => f.contentWindow.__pano.state === 'ready'), 'ready after cancel')
+    assert(guide.hidden, 'guide hidden outside capture')
+  } finally { clearInterval(hold); f.remove() }
+})
+
+test('live-panorama: no motion reading after 3 s shows Waiting for the motion sensor', async () => {
+  const { f, doc, until, turnTo } = await openLivePage()
+  try {
+    const status = doc.getElementById('status')
+    doc.getElementById('start').click()
+    assert(await until(() => status.textContent === 'Turn slowly'), 'capture loop started')
+    await new Promise(r => setTimeout(r, 2000))
+    assertEqual(status.textContent, 'Turn slowly')
+    assert(await until(() => status.textContent === 'Waiting for the motion sensor…', 20), 'waiting status')
+    turnTo(0)
+    assert(await until(() => status.textContent !== 'Waiting for the motion sensor…'), 'status clears when readings arrive')
+    doc.getElementById('cancel').click()
+    assert(await until(() => f.contentWindow.__pano.state === 'ready'), 'ready after cancel')
   } finally { f.remove() }
 })

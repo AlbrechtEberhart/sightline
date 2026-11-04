@@ -1,10 +1,10 @@
 import { test, assert, assertEqual, assertClose } from './harness.js'
 import { fetchAsset, OPENCV_ASSET } from '../shared/models.js'
 import { focalPx } from '../core/stitch/camera-model.js'
-import { Stitcher } from '../core/stitch/stitcher.js'
+import { Stitcher, photoSize } from '../core/stitch/stitcher.js'
 import { FileVideoSource } from '../recorded/video-source.js'
 import { scanClip } from '../recorded/panorama/scan.js'
-import { panClip } from './fixtures/synthetic-pan.js'
+import { panClip, makeScene, renderView } from './fixtures/synthetic-pan.js'
 
 const W = 640, H = 360
 
@@ -93,4 +93,47 @@ test('recorded-panorama: a hidden then visible cycle mid-scan still reaches pick
     assert(await until(() => win.__studioPano.state === 'picked'), 'picked')
     assert(win.__studioPano.picked >= 3, `picked ${win.__studioPano.picked}`)
   } finally { f.remove() }
+})
+
+// A FrameSource of 2400x1350 frames, one per yaw: 1280x720 views of the synthetic scene scaled up by 1.875. (Views
+// scaled up from 640x360 are soft enough that the worker's focal refinement drifts by about 0.6%.)
+function bigSource(yaws, { width = 2400, height = 1350 } = {}) {
+  const VW = 1280, VH = 720
+  const scene = makeScene({ f: focalPx({ lens: 'wide', width: VW, height: VH }) })
+  return {
+    meta: { width, height, fps: 30, frameCount: yaws.length, duration: yaws.length / 30 },
+    async *frames({ startFrame = 0 } = {}) {
+      for (let index = startFrame; index < yaws.length; index++) {
+        const view = renderView(scene, { yawDeg: yaws[index], pitchDeg: 2, width: VW, height: VH })
+        const image = await createImageBitmap(view, { resizeWidth: width, resizeHeight: height, resizeQuality: 'high' })
+        yield { image, t: index / 30, index }
+      }
+    },
+  }
+}
+
+test('recorded-panorama: frames over 1920 px are downscaled and stitch with the scaled focal', async () => {
+  const yaws = Array.from({ length: 76 }, (_, i) => 2 * i)
+  const source = bigSource(yaws)
+  const size = photoSize(source.meta)
+  assertEqual(size, { width: 1920, height: 1080 })
+  const opencvBytes = await fetchAsset(OPENCV_ASSET.url, OPENCV_ASSET)
+  const stitcher = await Stitcher.create({ opencvBytes, focalPx: focalPx({ lens: 'wide', ...size }), ...size, mode: 'studio' })
+  const sizes = []
+  try {
+    const res = await scanClip(source, { stitcher, onPick: (b) => sizes.push([b.width, b.height]) })
+    assertEqual(res.error, null)
+    assert(res.used.length >= 3 && res.used.length <= 5, `used ${res.used.length} frames`)
+    assert(sizes.every(([w, h]) => w === 1920 && h === 1080), `picked sizes ${JSON.stringify(sizes)}`)
+    const out = await stitcher.finish()
+    assertEqual(out.used, res.used.length)
+    out.yaws.forEach((y, i) => assertClose(y - out.yaws[0], yaws[res.used[i]] - yaws[res.used[0]], 0.3))
+  } catch (err) { stitcher.cancel(); throw err }
+})
+
+test('recorded-panorama: photoSize keeps frames at or under 1920 px', () => {
+  assertEqual(photoSize({ width: 1920, height: 1080 }), { width: 1920, height: 1080 })
+  assertEqual(photoSize({ width: 640, height: 360 }), { width: 640, height: 360 })
+  assertEqual(photoSize({ width: 2160, height: 3840 }), { width: 1080, height: 1920 })
+  assertEqual(photoSize({ width: 4032, height: 3024 }), { width: 1920, height: 1440 })
 })

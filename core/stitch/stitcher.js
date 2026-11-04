@@ -5,8 +5,35 @@
 //   s.cancel()                   // terminates the worker; finish() rejects with an AbortError
 // onProgress(stage: 'match' | 'warp' | 'blend' | 'encode', done, total).
 // The worker is terminated once finish settles, on any error, and on cancel; later adds just close their bitmap.
+// Pass width/height from photoSize(frame size) and add bitmaps made by photoBitmap, so large frames are downscaled.
 
 const READY_TIMEOUT_MS = 60000
+// Photos are downscaled to at most this on their long side before stitching: a 4K clip's held bitmaps plus the
+// worker's buffers would otherwise approach 1 GB in one iPhone tab. focalPx must be computed for the downscaled size.
+export const MAX_PHOTO_SIDE = 1920
+
+// The size photos of a width x height frame are stitched at: unchanged at or under MAX_PHOTO_SIDE on the long side.
+export function photoSize({ width, height }) {
+  const scale = Math.min(1, MAX_PHOTO_SIDE / Math.max(width, height))
+  if (scale === 1) return { width, height }
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) }
+}
+
+// An ImageBitmap of `image` at exactly `size` (from photoSize), as the worker expects. A browser that ignores the
+// resize options gets a canvas redraw instead.
+export async function photoBitmap(image, { width, height }) {
+  const srcW = image.displayWidth ?? image.videoWidth ?? image.width
+  const srcH = image.displayHeight ?? image.videoHeight ?? image.height
+  if (srcW === width && srcH === height) return createImageBitmap(image)
+  const bitmap = await createImageBitmap(image, { resizeWidth: width, resizeHeight: height, resizeQuality: 'high' })
+  if (bitmap.width === width && bitmap.height === height) return bitmap
+  bitmap.close()
+  const canvas = new OffscreenCanvas(width, height)
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(image, 0, 0, width, height)
+  return createImageBitmap(canvas)
+}
 
 function namedError(name, message) {
   const e = new Error(message)
