@@ -35,7 +35,7 @@ Both apps stitch a panorama on the phone and give you a JPEG. The first visit to
 
 1. Pick a zoom if the choice appears (1×, 1.5×, 2×). It shows only where Safari exposes camera zoom, and the last choice is remembered.
 2. Tap **Start** and allow motion access when asked.
-3. Stand still and turn slowly, about one turn of the body, in one direction. The first clear turn sets the direction. Photos are taken automatically, and the strip at the bottom shows them. Warnings appear if you turn too fast or the view is blurry.
+3. Stand still and turn slowly, up to almost a full turn, stopping short of 360°, in one direction. The first clear turn sets the direction. Photos are taken automatically, and the strip at the bottom shows them. Warnings appear if you turn too fast or the view is blurry.
 4. Hold the phone upright for up to 12 photos, or in landscape for up to 7. Live stops by itself at the limit, because a panorama is limited to about 340°. Rotating the phone mid-capture shows "Keep the phone the same way up" and skips frames until you turn it back.
 5. Tap **Done**, wait for the stitch, then use **Share…** or **Save file**.
 

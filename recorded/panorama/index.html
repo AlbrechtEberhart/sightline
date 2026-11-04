@@ -109,6 +109,11 @@
 
   <div class="footer-disclaimer">RESEARCH DEMO · NOT A DRIVING AID</div>
 </div>
+<!-- Preload the stitch worker and its imports so Stitch works offline after one visit. -->
+<link rel="modulepreload" href="../../core/stitch/stitch-worker.js">
+<link rel="modulepreload" href="../../core/stitch/geometry.js">
+<link rel="modulepreload" href="../../core/stitch/thumb.js">
+<link rel="modulepreload" href="../../shared/lib/opencv.js">
 <script type="module" src="app.js"></script>
 </body>
 </html>
