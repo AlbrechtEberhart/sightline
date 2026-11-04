@@ -23,11 +23,14 @@ test('motion: side tilt is roll', () => {
   assert(Math.abs(c.pitch) < 0.5, `pitch ${c.pitch}`)
   assertClose(c.yaw, 0, 0.01)
   assert(c.roll > 0, 'top tilted to the right is positive roll')
+  const w = orientationToCamera(90, 100, -90) // same pose in the W3C range an iPhone reports
+  assertClose(Math.abs(w.roll), 10, 0.01)
+  assert(Math.abs(w.pitch) < 0.5, `pitch ${w.pitch}`)
 })
 test('motion: gamma on an upright phone is a turn, not a roll', () => {
   // Gamma rotates about the device y axis, which is vertical when upright.
   const c = orientationToCamera(0, 90, 10)
-  assertClose(Math.abs(c.yaw), 10, 0.01)
+  assertClose(c.yaw, -10, 0.01)
   assertClose(c.roll, 0, 0.01)
   assertClose(c.pitch, 0, 0.01)
 })
@@ -47,6 +50,27 @@ test('motion: reading is relative to zero and wraps', () => {
   const r = m.reading()
   assertClose(r.yaw, -20, 0.01)
   assertClose(r.pitch, 0, 0.01)
+  m.stop()
+})
+test('motion: zero before the first event uses that event as origin', () => {
+  const win = new EventTarget(), m = createMotion(win)
+  m.start()
+  m.zero()
+  assertEqual(m.reading(), null)
+  win.dispatchEvent(orient(170, 90, 0))
+  assertClose(m.reading().yaw, 0, 0.01)
+  win.dispatchEvent(orient(-170, 90, 0))
+  assertClose(m.reading().yaw, -20, 0.01)
+  m.stop()
+})
+test('motion: window.orientation is the screen angle fallback', () => {
+  const win = new EventTarget(), m = createMotion(win)
+  win.orientation = -90 // iOS < 16.4, no screen.orientation
+  m.start()
+  win.dispatchEvent(orient(0, 0, 90)) // landscape the other way: screen angle 270
+  const r = m.reading()
+  assertClose(r.pitch, 0, 0.01)
+  assertClose(r.roll, 0, 0.01) // level: roll would be 90 in magnitude if the angle were read as 0
   m.stop()
 })
 test('motion: null angles give no reading; rate is rotation magnitude', () => {

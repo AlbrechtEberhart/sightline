@@ -69,12 +69,15 @@ export function createMotion(win = window) {
   let abs = null // latest absolute { yaw, pitch, roll }
   let origin = { yaw: 0, pitch: 0, roll: 0 }
   let rate = 0
+  let pendingZero = false // zero() was called before the first orientation event
 
-  const screenAngle = () => win.screen?.orientation?.angle ?? 0
+  // screen.orientation is missing on iOS < 16.4; window.orientation has the same CCW-positive angle.
+  const screenAngle = () => (((win.screen?.orientation?.angle ?? win.orientation ?? 0) % 360) + 360) % 360
 
   const onOrientation = (e) => {
     if (e.alpha == null || e.beta == null || e.gamma == null) { abs = null; return }
     abs = orientationToCamera(e.alpha, e.beta, e.gamma, screenAngle())
+    if (pendingZero) { origin = { ...abs }; pendingZero = false }
   }
   const onMotion = (e) => {
     const r = e.rotationRate
@@ -104,6 +107,7 @@ export function createMotion(win = window) {
     /** Make the current direction the origin of reading(). */
     zero() {
       if (abs) origin = { ...abs }
+      else pendingZero = true // the next complete orientation event becomes the origin
     },
     reading() {
       if (!abs) return null
