@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sightline Studio">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="icon" href="../icons/icon-180.png" type="image/png">
+<title>Sightline Studio · Panorama</title>
+<link rel="stylesheet" href="../../shared/ui.css">
+<style>
+  /* One column of step panels; only the panels for the current state are shown. */
+  .app.studio { display: flex; flex-direction: column; height: auto; min-height: 100%; max-width: 860px; margin: 0 auto; }
+  .studio .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px;
+  }
+  .studio [hidden] { display: none !important; }
+  .studio .panel .pill:not(.active) { background: var(--bg); }
+  .studio .pill:disabled { opacity: .5; cursor: default; }
+  .studio .panel p { margin: 0 0 10px; }
+  .studio .muted { color: var(--muted); font-size: 13px; }
+  .studio .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .studio .file-pick input[type=file] { display: block; margin: 10px 0; max-width: 100%; }
+  .studio .progress { margin: 10px 0; }
+  .studio .strip { display: flex; gap: 6px; overflow-x: auto; margin: 10px 0; min-height: 52px; }
+  .studio .strip canvas { height: 48px; border-radius: 6px; border: 1px solid var(--accent); flex: none; }
+  .studio .notes { color: var(--muted); font-size: 13px; }
+  .studio .scroll { max-height: 62vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; }
+  .studio .scroll img { height: min(50vh, 480px); width: auto; max-width: none; display: block; }
+  .studio .error-card { margin: 0; }
+</style>
+</head>
+<body>
+<div class="app studio">
+  <div class="topbar">
+    <h1>Sightline Studio</h1>
+    <nav class="tool-switch"><a href="../yolo/">YOLO</a><a href="../panorama/" aria-current="page">Panorama</a></nav>
+    <span id="clip-name" class="status"></span>
+  </div>
+
+  <div id="errors"></div>
+
+  <section id="panel-loading" class="panel">
+    <div id="loading-text">Loading panorama engine…</div>
+    <div class="progress"><div id="bar" class="bar"></div></div>
+  </section>
+
+  <section id="panel-choose" class="panel file-pick" hidden>
+    <div class="section-title">Choose a clip</div>
+    <p>Pick a video where you panned slowly across a scene. It is processed on this device; nothing is uploaded.</p>
+    <input id="file" type="file" accept="video/*">
+  </section>
+
+  <section id="panel-ready" class="panel" hidden>
+    <div class="section-title">Clip</div>
+    <p id="clip-info" class="muted"></p>
+    <div class="section-title">Lens</div>
+    <div class="row">
+      <button class="pill" type="button" data-lens="wide">Wide (1×)</button>
+      <button class="pill" type="button" data-lens="ultrawide">Ultra wide (0.5×)</button>
+    </div>
+    <div class="section-title">&nbsp;</div>
+    <div class="row">
+      <button id="scan" class="pill active" type="button">Scan</button>
+      <button class="pill choose-another" type="button">Choose another clip</button>
+    </div>
+  </section>
+
+  <section id="panel-scanning" class="panel" hidden>
+    <div class="section-title">Scanning</div>
+    <div class="progress"><div id="scan-bar" class="bar"></div></div>
+    <p id="scan-text" class="status" aria-live="polite">Starting…</p>
+    <div id="strip-scan" class="strip"></div>
+    <div class="row"><button id="scan-cancel" class="pill" type="button">Cancel</button></div>
+  </section>
+
+  <section id="panel-picked" class="panel" hidden>
+    <div class="section-title">Picked</div>
+    <p id="picked-text" class="status" aria-live="polite"></p>
+    <div id="strip-picked" class="strip"></div>
+    <p id="picked-notes" class="notes" hidden></p>
+    <div class="row">
+      <button id="stitch" class="pill active" type="button">Stitch</button>
+      <button id="picked-back" class="pill" type="button">Back</button>
+      <button class="pill choose-another" type="button">Choose another clip</button>
+    </div>
+  </section>
+
+  <section id="panel-stitching" class="panel" hidden>
+    <div class="section-title">Stitching</div>
+    <div class="progress"><div id="stitch-bar" class="bar"></div></div>
+    <p id="stitch-text" class="status" aria-live="polite">Starting…</p>
+    <div class="row"><button id="stitch-cancel" class="pill" type="button">Cancel</button></div>
+  </section>
+
+  <section id="panel-result" class="panel" hidden>
+    <div class="scroll"><img id="pano-img" alt="Stitched panorama"></div>
+    <p id="result-notes" class="notes" hidden></p>
+    <div class="row">
+      <button id="share" class="pill active" type="button" hidden>Share…</button>
+      <a id="save-file" class="pill" hidden>Save file</a>
+      <button class="pill choose-another" type="button">Choose another clip</button>
+    </div>
+  </section>
+
+  <div class="footer-disclaimer">RESEARCH DEMO · NOT A DRIVING AID</div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

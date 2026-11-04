@@ -3,9 +3,10 @@
 //
 // Feed it one frame at a time (its horizontal shift from the previous frame and its sharpness). The shifts add up
 // to a position along the pan; the direction is fixed the first time that passes DIRECTION_FRACTION of the width.
-// Photos are due every STEP_FRACTION of the width. In the window around each due position the sharpest frame is
-// kept, and it becomes a final pick when the pan moves past the window. Only that best frame, plus the sharpest
-// frame since the last window (for the end-of-clip rule), is ever held.
+// The first window covers the start of the pan. Each later window is relative to the previous pick at position p:
+// [p + STEP_MIN, p + STEP_MAX] of the width. The sharpest frame in the window is kept, and it becomes a final pick
+// when the pan moves past the window, so consecutive picks are always STEP_MIN..STEP_MAX apart (35-50% overlap).
+// Only that best frame, plus the sharpest frame since the last window (for the end-of-clip rule), is ever held.
 //
 // Caller notes:
 //  - A single push can return hold: true together with pick for the same index (a window the pan jumped over takes
@@ -13,8 +14,9 @@
 //  - Picks returned from push() before finish() reports error "Not enough panning" must be discarded by the caller.
 //  - A non-finite dx counts as a frame but adds no movement. width must be a finite number > 0 (else RangeError).
 
-const STEP_FRACTION = 0.65 // spacing between target positions, in frame widths
-const WINDOW_FRACTION = 0.1 // half-width of each target window
+const FIRST_WINDOW = 0.1 // the first photo is the sharpest frame in the first 0.1 W of the pan
+const STEP_MIN = 0.5 // each later window starts this far (in frame widths) past the previous pick
+const STEP_MAX = 0.65 // ... and closes this far past it
 const DIRECTION_FRACTION = 0.1 // |position| beyond this fixes the pan direction
 const END_FRACTION = 0.3 // movement after the last pick needed to add a closing photo
 const MIN_PAN_FRACTION = 0.5 // total movement below this is "Not enough panning"
@@ -35,9 +37,8 @@ export function createFramePicker({ width, maxPhotos = 12 }) {
   let lastPickS = null
   let count = 0
 
-  const target = k => k * STEP_FRACTION * width
-  const upper = k => target(k) + WINDOW_FRACTION * width
-  const lower = k => k === 0 ? -Infinity : target(k) - WINDOW_FRACTION * width
+  const upper = () => win === 0 ? FIRST_WINDOW * width : lastPickS + STEP_MAX * width
+  const lower = () => win === 0 ? -Infinity : lastPickS + STEP_MIN * width
 
   function drop(frame, release) {
     held.delete(frame.index)
@@ -60,8 +61,8 @@ export function createFramePicker({ width, maxPhotos = 12 }) {
     let hold = false
     let consumed = false // this frame is itself the pick
 
-    // Close every window the pan has moved past; at most one pick per push.
-    while (s > upper(win)) {
+    // Close the window if the pan has moved past it; at most one pick per push.
+    if (s > upper()) {
       if (tail) { drop(tail, release); tail = null }
       if (pick === null) {
         if (best) {
@@ -92,7 +93,9 @@ export function createFramePicker({ width, maxPhotos = 12 }) {
 
     if (!consumed) {
       const frame = { index, s, sharpness }
-      if (s >= lower(win)) {
+      if (s > upper()) {
+        // Still past the new window (a jump): not a candidate; the next push closes it with the first frame past.
+      } else if (s >= lower()) {
         if (tail) { drop(tail, release); tail = null }
         entered = true
         if (!best || sharpness > best.sharpness) {

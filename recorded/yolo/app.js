@@ -362,3 +362,5 @@ window.addEventListener('pagehide', () => { stopWork(); source?.stop() })
 
 syncSettingsUi()
 setState('choose')
+
+window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload() }) // bfcache restore has a stale decoder

@@ -1,4 +1,4 @@
-import { test, assertEqual, assertClose, skip, fixture } from './harness.js'
+import { test, assert, assertEqual, assertClose, skip, fixture } from './harness.js'
 import { exportClip } from '../recorded/yolo/export.js'
 import { processClip } from '../recorded/yolo/process.js'
 import { FileVideoSource } from '../recorded/video-source.js'
@@ -16,4 +16,8 @@ test('recorded-yolo: exportClip keeps frames, duration, audio', async () => {
 })
 test('recorded-yolo: exportClip without audio', async () => {
   const out = await run('bus-3s-noaudio.mp4'); assertEqual([out.meta.frameCount, out.meta.hasAudio], [90, false])
+})
+test('recorded-yolo: tool switch present', async () => {
+  const html = await (await fetch(new URL('../recorded/yolo/', import.meta.url))).text()
+  assert(html.includes('class="tool-switch"'), 'tool switch in the page')
 })

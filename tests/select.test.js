@@ -39,8 +39,8 @@ test('select: picks sharpest near each target', () => {
   const { picks, fin } = run(frames(200, 10, [3, 66, 129]))
   assertEqual(picks.slice(0, 3), [3, 66, 129])
   assertEqual(fin.error, null)
-  assertEqual(picks.length, 4) // the clip ends at s = 1990, inside window 3, so finish picks that window's best
-  assertEqual(fin.picks, [picks[3]])
+  assertEqual(picks, [3, 66, 129, 179]) // window 3 is [1790, 1940]; nothing sharper, so its first frame is picked when s passes 1940
+  assertEqual(fin.picks, [])
 })
 
 test('select: leftward pan picks the same spacing', () => {
@@ -64,14 +64,16 @@ test('select: skipped window takes the first frame past it', () => {
     { index: 0, dx: 0, sharpness: 1 },
     { index: 1, dx: 70, sharpness: 1 },
     { index: 2, dx: 50, sharpness: 1 }, // s = 120: window 0 closes, picks 0
-    { index: 3, dx: 400, sharpness: 5 }, // s = 520: between windows, held as tail
-    { index: 4, dx: 400, sharpness: 1 }, // s = 920: window 1 (550..750) never saw a frame
+    { index: 3, dx: 400, sharpness: 5 }, // s = 520: inside window 1 (500..650), held as its best
+    { index: 4, dx: 400, sharpness: 1 }, // s = 920: window 1 closes and picks 3; this frame is the tail
+    { index: 5, dx: 400, sharpness: 1 }, // s = 1320: window 2 (1020..1170) was never entered: the first frame past it is picked
   ]
   const { results, picks, held } = run(list)
   assertEqual(results[2].pick, 0)
-  assertEqual(results[3], { hold: true, release: [2], pick: null }) // sharper than frame 2, the tail so far
-  assertEqual(results[4], { hold: true, release: [3], pick: 4 })
-  assertEqual(picks, [0, 4])
+  assertEqual(results[3], { hold: true, release: [2], pick: null }) // in the window, so the tail is dropped
+  assertEqual(results[4], { hold: true, release: [], pick: 3 })
+  assertEqual(results[5], { hold: true, release: [4], pick: 5 })
+  assertEqual(picks, [0, 3, 5])
   assertEqual(held.size, 0)
 })
 
@@ -129,5 +131,16 @@ test('select: width must be a finite number above zero', () => {
     let error = null
     try { createFramePicker({ width }) } catch (e) { error = e }
     assert(error instanceof RangeError, `width ${width} throws a RangeError`)
+  }
+})
+
+test('select: picks stay 0.5-0.65 W apart even when sharpness keeps rising', () => {
+  const list = frames(400, 10, [], {})
+  list.forEach(f => { f.sharpness = 1 + f.index }) // the sharpest frame in every window is its last
+  const { picks } = run(list)
+  assert(picks.length >= 5, `picks ${picks.length}`)
+  for (let i = 1; i < picks.length; i++) {
+    const gap = (picks[i] - picks[i - 1]) * 10
+    assert(gap <= 0.65 * W + 1e-9 && gap >= 0.5 * W - 1e-9, `gap ${gap} between picks ${picks[i - 1]} and ${picks[i]}`)
   }
 })
