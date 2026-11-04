@@ -39,7 +39,7 @@ test('select: picks sharpest near each target', () => {
   const { picks, fin } = run(frames(200, 10, [3, 66, 129]))
   assertEqual(picks.slice(0, 3), [3, 66, 129])
   assertEqual(fin.error, null)
-  assertEqual(picks.length, 4) // finish adds a last pick: 300+ px followed the last pick
+  assertEqual(picks.length, 4) // the clip ends at s = 1990, inside window 3, so finish picks that window's best
   assertEqual(fin.picks, [picks[3]])
 })
 
@@ -99,4 +99,35 @@ test('select: caps at 12', () => {
   assert(results.slice(capPush + 1).length > 0, 'frames follow the cap')
   assert(results.slice(capPush + 1).every(r => !r.hold && r.pick === null && r.release.length === 0), 'later frames are not held')
   assert(!run(frames(200, 10)).fin.messages.some(m => m.startsWith('Used the first')), 'no cap message below the cap')
+})
+
+test('select: end of clip in the gap adds the sharpest frame after 0.3 W', () => {
+  // Window 2's pick is frame 129 (s = 1290); the clip ends at s = 1600, between windows 2 and 3, 310 px later.
+  const { picks, fin, held } = run(frames(161, 10, [3, 66, 129, 150]))
+  assertEqual(fin.picks, [150])
+  assertEqual(picks, [3, 66, 129, 150])
+  assertEqual(held.size, 0)
+})
+
+test('select: end of clip in the gap adds nothing under 0.3 W', () => {
+  // Same pan, ending at s = 1540: only 250 px after the last pick, so the tail frame is released instead.
+  const { picks, fin, held } = run(frames(155, 10, [3, 66, 129, 150]))
+  assertEqual(fin.picks, [])
+  assertEqual(picks, [3, 66, 129])
+  assert(fin.release.includes(150), 'the tail frame is released')
+  assertEqual(held.size, 0)
+})
+
+test('select: a NaN dx does not stop windows closing', () => {
+  const { picks, fin } = run(frames(200, 10, [3, 66, 129], { 100: { dx: NaN } }))
+  assertEqual(picks.slice(0, 3), [3, 66, 129])
+  assertEqual(fin.error, null)
+})
+
+test('select: width must be a finite number above zero', () => {
+  for (const width of [0, -5, NaN, Infinity, undefined]) {
+    let error = null
+    try { createFramePicker({ width }) } catch (e) { error = e }
+    assert(error instanceof RangeError, `width ${width} throws a RangeError`)
+  }
 })

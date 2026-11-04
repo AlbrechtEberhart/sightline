@@ -6,6 +6,12 @@
 // Photos are due every STEP_FRACTION of the width. In the window around each due position the sharpest frame is
 // kept, and it becomes a final pick when the pan moves past the window. Only that best frame, plus the sharpest
 // frame since the last window (for the end-of-clip rule), is ever held.
+//
+// Caller notes:
+//  - A single push can return hold: true together with pick for the same index (a window the pan jumped over takes
+//    the first frame past it). Hold that frame, then hand it straight to the stitcher; it is not held afterwards.
+//  - Picks returned from push() before finish() reports error "Not enough panning" must be discarded by the caller.
+//  - A non-finite dx counts as a frame but adds no movement. width must be a finite number > 0 (else RangeError).
 
 const STEP_FRACTION = 0.65 // spacing between target positions, in frame widths
 const WINDOW_FRACTION = 0.1 // half-width of each target window
@@ -15,6 +21,7 @@ const MIN_PAN_FRACTION = 0.5 // total movement below this is "Not enough panning
 const FAST_FRACTION = 0.15 // any single |dx| above this is "Pan was fast"
 
 export function createFramePicker({ width, maxPhotos = 12 }) {
+  if (!Number.isFinite(width) || width <= 0) throw new RangeError('createFramePicker: width must be a finite number > 0')
   const held = new Set()
   let pos = 0
   let direction = 0 // +1 / -1 once set
@@ -38,6 +45,7 @@ export function createFramePicker({ width, maxPhotos = 12 }) {
   }
 
   function push({ index, dx, sharpness }) {
+    if (!Number.isFinite(dx)) dx = 0
     pos += dx
     if (Math.abs(dx) > FAST_FRACTION * width) fast = true
     if (!direction && Math.abs(pos) > DIRECTION_FRACTION * width) direction = pos > 0 ? 1 : -1
@@ -74,6 +82,7 @@ export function createFramePicker({ width, maxPhotos = 12 }) {
     }
 
     if (count >= maxPhotos) {
+      // Defensive: closing a window already gave up the tail and handed over the best, so nothing should be held here.
       for (const i of held) release.push(i)
       held.clear()
       best = null
