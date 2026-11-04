@@ -1,8 +1,8 @@
 // Sightline Live: camera -> YOLO11n -> boxes, with optional annotated MP4 recording.
 import '../../shared/register-sw.js'
 import { listLenses, LiveCameraSource } from '../live-camera.js'
-import { createDetector } from '../../core/detect/detector.js'
-import { fetchModel, MODEL_URLS } from '../../shared/models.js'
+import { createDetectorFor } from '../../shared/detector-loader.js'
+import { coerceSettings } from '../../shared/settings.js'
 import { fitCover, drawDetections } from '../../shared/draw-boxes.js'
 import { createSaveControls } from '../../shared/save.js'
 import { showError, loadSettings, saveSettings } from '../../shared/ui.js'
@@ -25,14 +25,12 @@ const params = new URLSearchParams(location.search)
 const clipUrl = params.get('source') === 'file' ? params.get('clip') : null
 
 // Stored settings may be hand-edited or from an older version: coerce each field to a valid value.
-function validSettings(raw) {
-  return {
-    conf: typeof raw.conf === 'number' && Number.isFinite(raw.conf) ? Math.min(0.9, Math.max(0.1, raw.conf)) : DEFAULTS.conf,
-    inputSize: raw.inputSize === 320 || raw.inputSize === 640 ? raw.inputSize : DEFAULTS.inputSize,
-    showLabels: typeof raw.showLabels === 'boolean' ? raw.showLabels : DEFAULTS.showLabels,
-  }
+const SCHEMA = {
+  conf: { default: DEFAULTS.conf, range: [0.1, 0.9] },
+  inputSize: { default: DEFAULTS.inputSize, oneOf: [320, 640] },
+  showLabels: { default: DEFAULTS.showLabels },
 }
-const settings = validSettings(loadSettings(SETTINGS_KEY, DEFAULTS))
+const settings = coerceSettings(loadSettings(SETTINGS_KEY, DEFAULTS), SCHEMA)
 const stats = window.__liveStats = { framesSeen: 0, framesDetected: 0, lastCount: 0, backend: null, status: '' }
 
 let detector = null
@@ -86,10 +84,9 @@ async function loadDetector() {
   el.bar.style.width = '0'
   setLoading(`Loading model (${settings.inputSize})…`)
   try {
-    const modelBytes = await fetchModel(MODEL_URLS[settings.inputSize], (loaded, total) => {
+    detector = await createDetectorFor(settings.inputSize, (loaded, total) => {
       if (total) el.bar.style.width = `${Math.min(100, (loaded / total) * 100)}%`
     })
-    detector = await createDetector({ modelBytes, inputSize: settings.inputSize, backend: 'auto' })
     stats.backend = detector.backend
   } finally {
     setLoading(null)

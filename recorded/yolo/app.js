@@ -5,9 +5,9 @@ import { FileVideoSource } from '../video-source.js'
 import { processClip, estimateSeconds, summarize } from './process.js'
 import { exportClip } from './export.js'
 import { createReview } from './review.js'
-import { createWakeLock } from './wake-lock.js'
-import { createDetector } from '../../core/detect/detector.js'
-import { fetchModel, MODEL_URLS } from '../../shared/models.js'
+import { createWakeLock } from '../../shared/wake-lock.js'
+import { createDetectorFor } from '../../shared/detector-loader.js'
+import { coerceSettings } from '../../shared/settings.js'
 import { createSaveControls } from '../../shared/save.js'
 import { showError, formatEta, loadSettings, saveSettings } from '../../shared/ui.js'
 
@@ -28,15 +28,13 @@ const el = {
 const PANEL_FOR = { choose: 'choose', settings: 'settings', processing: 'processing', review: 'review', exporting: 'review', done: 'review', error: null }
 
 // Stored settings may be hand-edited or from an older version: coerce each field to a valid value.
-function validSettings(raw) {
-  return {
-    conf: typeof raw.conf === 'number' && Number.isFinite(raw.conf) ? Math.min(0.9, Math.max(0.1, raw.conf)) : DEFAULTS.conf,
-    inputSize: raw.inputSize === 320 || raw.inputSize === 640 ? raw.inputSize : DEFAULTS.inputSize,
-    step: raw.step === 1 || raw.step === 2 ? raw.step : DEFAULTS.step,
-    showLabels: typeof raw.showLabels === 'boolean' ? raw.showLabels : DEFAULTS.showLabels,
-  }
+const SCHEMA = {
+  conf: { default: DEFAULTS.conf, range: [0.1, 0.9] },
+  inputSize: { default: DEFAULTS.inputSize, oneOf: [320, 640] },
+  step: { default: DEFAULTS.step, oneOf: [1, 2] },
+  showLabels: { default: DEFAULTS.showLabels },
 }
-const settings = validSettings(loadSettings(SETTINGS_KEY, DEFAULTS))
+const settings = coerceSettings(loadSettings(SETTINGS_KEY, DEFAULTS), SCHEMA)
 const studio = window.__studio = { state: 'choose' }
 const review = createReview(el.video, el.overlay)
 const wake = createWakeLock()
@@ -165,10 +163,9 @@ async function loadDetector(mine) {
   detector = null
   setBar(el.procBar, 0)
   el.procText.textContent = `Loading model (${settings.inputSize})…`
-  const modelBytes = await fetchModel(MODEL_URLS[settings.inputSize], (loaded, total) => {
+  const d = await createDetectorFor(settings.inputSize, (loaded, total) => {
     if (total && mine === procEpoch) setBar(el.procBar, (loaded / total) * 100)
   })
-  const d = await createDetector({ modelBytes, inputSize: settings.inputSize, backend: 'auto' })
   if (detector) detector.dispose() // cannot happen inside serial, but never leak a session
   detector = d
 }

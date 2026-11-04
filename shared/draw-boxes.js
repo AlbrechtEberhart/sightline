@@ -22,6 +22,12 @@ export function fitContain(srcW, srcH, dstW, dstH) {
   }
 }
 
+// Stroke and tag scale for an output canvas: 1 up to a 390 px short side (an iPhone viewport),
+// growing in proportion above it so exports keep the same visual weight.
+export function strokeScale(width, height) {
+  return Math.max(1, Math.min(width, height) / 390)
+}
+
 const TAG_FONT_PX = 12
 const TAG_HEIGHT_PX = 18
 const TAG_PAD_PX = 4

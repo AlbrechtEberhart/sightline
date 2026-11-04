@@ -2,7 +2,7 @@
 // stored boxes onto a canvas, re-encode to H.264 and pass the original AAC audio through.
 import { FileVideoSource } from '../video-source.js'
 import { Mp4Encoder, capTo1080 } from '../../shared/encoder.js'
-import { drawDetections } from '../../shared/draw-boxes.js'
+import { drawDetections, strokeScale } from '../../shared/draw-boxes.js'
 
 function abortError() {
   return new DOMException('Export cancelled', 'AbortError')
@@ -35,7 +35,7 @@ export async function exportClip(blob, detections, { showLabels = true, signal, 
     // capTo1080 keeps the aspect ratio, so one scale maps source pixels to output pixels.
     const scale = canvas.width / meta.width
     // Stroke and tag sized for the output resolution, as in live/yolo/recording.js.
-    const dpr = Math.max(1, Math.min(canvas.width, canvas.height) / 390)
+    const dpr = strokeScale(canvas.width, canvas.height)
     for await (const { image, t, index } of source.frames()) {
       try {
         if (signal?.aborted) break

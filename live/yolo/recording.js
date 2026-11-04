@@ -6,7 +6,7 @@
 // reports a different size cannot stretch the clip. If a later frame has a different display
 // size, addFrame resolves 'resized' and the caller should stop the recording.
 import { Mp4Encoder, capTo1080 } from '../../shared/encoder.js'
-import { drawDetections } from '../../shared/draw-boxes.js'
+import { drawDetections, strokeScale } from '../../shared/draw-boxes.js'
 
 export class Recorder {
   constructor() {
@@ -68,7 +68,7 @@ export class Recorder {
     const { width: w, height: h } = this._canvas
     this._ctx.drawImage(image, 0, 0, w, h)
     // capTo1080 keeps the aspect ratio, so one scale serves x and y.
-    drawDetections(this._ctx, boxes, { scale: w / frameW, showLabels, dpr: Math.max(1, Math.min(w, h) / 390) })
+    drawDetections(this._ctx, boxes, { scale: w / frameW, showLabels, dpr: strokeScale(w, h) })
     this.elapsed = t - this._t0
     await this.encoder.addFrame(this._canvas, this.elapsed)
     return 'ok'

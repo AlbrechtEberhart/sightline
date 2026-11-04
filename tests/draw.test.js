@@ -1,5 +1,5 @@
 import { test, assert, assertEqual, assertClose } from './harness.js'
-import { fitCover, fitContain, drawDetections } from '../shared/draw-boxes.js'
+import { fitCover, fitContain, drawDetections, strokeScale } from '../shared/draw-boxes.js'
 import { createFpsMeter, formatStatus, lowFpsHint } from '../live/yolo/status.js'
 import { colorFor } from '../core/detect/colors.js'
 test('draw: fitCover portrait clip on phone', () => {
@@ -38,4 +38,10 @@ test('draw: tag clamped inside canvas', () => {
   const c = colorFor(2)
   assertEqual(hexAt(g, 99, 8), c)
   assertEqual(hexAt(g, 80, 20), c, 'tag should be pulled left to fit the canvas')
+})
+
+test('draw: strokeScale', () => {
+  assertEqual(strokeScale(390, 844), 1)
+  assertEqual(strokeScale(1080, 1920), 1080 / 390)
+  assertEqual(strokeScale(100, 100), 1)
 })
