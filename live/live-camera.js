@@ -23,6 +23,22 @@ export async function listLenses(enumerate = () => navigator.mediaDevices.enumer
   return videos.filter((d) => REAR_RE.test(d.label)).map((d) => ({ deviceId: d.deviceId, label: d.label }))
 }
 
+/**
+ * The zoom range a camera track supports, or null if it has no zoom control.
+ * @param {MediaStreamTrack | null} track
+ * @returns {{ min: number, max: number } | null}
+ */
+export function zoomRange(track) {
+  const zoom = track?.getCapabilities?.().zoom
+  if (!zoom || typeof zoom.min !== 'number' || typeof zoom.max !== 'number') return null
+  return { min: zoom.min, max: zoom.max }
+}
+
+/** Set the camera zoom factor (clamping is the caller's job). */
+export function setZoom(track, z) {
+  return track.applyConstraints({ advanced: [{ zoom: z }] })
+}
+
 function waitForMetadata(video) {
   if (video.readyState >= 1 && video.videoWidth) return Promise.resolve()
   return new Promise((resolve, reject) => {
@@ -39,10 +55,11 @@ function waitForMetadata(video) {
 
 export class LiveCameraSource {
   /**
-   * @param {{ deviceId?: string, debugFile?: Blob }} [opts]
+   * @param {{ deviceId?: string, debugFile?: Blob, motion?: { reading: () => object | null } }} [opts]
+   *   `motion` (see motion.js) is sampled for every yielded frame.
    * @returns {Promise<LiveCameraSource>}
    */
-  static async open({ deviceId, debugFile } = {}) {
+  static async open({ deviceId, debugFile, motion } = {}) {
     const video = document.createElement('video')
     video.playsInline = true
     video.muted = true
@@ -94,12 +111,13 @@ export class LiveCameraSource {
     }
     return new LiveCameraSource(video, stream, objectUrl, {
       width: video.videoWidth, height: video.videoHeight, fps, live: true,
-    })
+    }, motion)
   }
 
-  constructor(video, stream, objectUrl, meta) {
+  constructor(video, stream, objectUrl, meta, motion) {
     this.video = video
     this.meta = meta
+    this._motion = motion
     this._stream = stream
     this._objectUrl = objectUrl
     this._t0 = performance.now()
@@ -138,7 +156,12 @@ export class LiveCameraSource {
     })
   }
 
-  /** @returns {AsyncGenerator<{ image: VideoFrame, t: number, motion: undefined }>} */
+  /** The camera's video track, or null for a debug-file source. */
+  get track() {
+    return this._stream?.getVideoTracks()[0] ?? null
+  }
+
+  /** @returns {AsyncGenerator<{ image: VideoFrame, t: number, motion: object | undefined }>} */
   async *frames() {
     let lastT = -Infinity
     while (!this._stopped) {
@@ -147,7 +170,7 @@ export class LiveCameraSource {
       if (t <= lastT) t = lastT + 1e-6 // strictly increasing
       lastT = t
       const image = new VideoFrame(this.video, { timestamp: Math.round(t * 1e6) })
-      yield { image, t, motion: undefined }
+      yield { image, t, motion: this._motion?.reading() ?? undefined }
     }
   }
 
