@@ -5,7 +5,8 @@
 // to a position along the pan; the direction is fixed the first time that passes DIRECTION_FRACTION of the width.
 // The first window covers the start of the pan. Each later window is relative to the previous pick at position p:
 // [p + STEP_MIN, p + STEP_MAX] of the width. The sharpest frame in the window is kept, and it becomes a final pick
-// when the pan moves past the window, so consecutive picks are always STEP_MIN..STEP_MAX apart (35-50% overlap).
+// when the pan moves past the window, so consecutive picks are STEP_MIN..STEP_MAX apart (35-50% overlap) unless the pan jumps over a window
+// (a frame that is already past the new window becomes its pending best and is picked next).
 // Only that best frame, plus the sharpest frame since the last window (for the end-of-clip rule), is ever held.
 //
 // Caller notes:
@@ -94,7 +95,11 @@ export function createFramePicker({ width, maxPhotos = 12 }) {
     if (!consumed) {
       const frame = { index, s, sharpness }
       if (s > upper()) {
-        // Still past the new window (a jump): not a candidate; the next push closes it with the first frame past.
+        // Already past the new window (a jump): it is the pending best, and the next close or finish() picks it.
+        entered = true
+        best = frame
+        held.add(index)
+        hold = true
       } else if (s >= lower()) {
         if (tail) { drop(tail, release); tail = null }
         entered = true

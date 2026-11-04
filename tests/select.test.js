@@ -144,3 +144,16 @@ test('select: picks stay 0.5-0.65 W apart even when sharpness keeps rising', () 
     assert(gap <= 0.65 * W + 1e-9 && gap >= 0.5 * W - 1e-9, `gap ${gap} between picks ${picks[i - 1]} and ${picks[i]}`)
   }
 })
+
+test('select: a frame already past the new window becomes the pending best', () => {
+  const list = [
+    { index: 0, dx: 0, sharpness: 1 },
+    { index: 1, dx: 90, sharpness: 1 },
+    { index: 2, dx: 900, sharpness: 1 }, // s = 990: window 0 closes (pick 0) and this frame is past the new window [500, 650]
+    { index: 3, dx: 10, sharpness: 1 }, // s = 1000: the next close picks frame 2
+  ]
+  const { results, picks } = run(list)
+  assertEqual(results[2], { hold: true, release: [], pick: 0 })
+  assertEqual(results[3], { hold: true, release: [], pick: 2 })
+  assertEqual(picks, [0, 2])
+})

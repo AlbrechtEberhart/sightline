@@ -66,3 +66,31 @@ test('recorded-panorama: page reaches result', async () => {
     assert(!save.hidden && save.download === 'pan-panorama.jpg', 'Save file link')
   } finally { f.remove() }
 })
+
+test('recorded-panorama: a hidden then visible cycle mid-scan still reaches picked', async () => {
+  const clip = await panClip({ yaws: Array.from({ length: 151 }, (_, i) => i) })
+  const f = document.createElement('iframe'); f.style.width = '390px'; f.style.height = '844px'
+  f.src = new URL('../recorded/panorama/', import.meta.url); document.body.append(f)
+  const until = async (fn, tries = 180) => { for (let i = 0; i < tries; i++) { if (fn()) return true; await new Promise(r => setTimeout(r, 500)) } return false }
+  try {
+    assert(await until(() => f.contentWindow.__studioPano?.state === 'choose'), 'choose')
+    const win = f.contentWindow, doc = f.contentDocument
+    let hidden = false
+    Object.defineProperty(doc, 'hidden', { configurable: true, get: () => hidden })
+    const dt = new win.DataTransfer()
+    dt.items.add(new win.File([clip], 'pan.mp4', { type: 'video/mp4' }))
+    const input = doc.getElementById('file')
+    input.files = dt.files
+    input.dispatchEvent(new win.Event('change', { bubbles: true }))
+    assert(await until(() => win.__studioPano.state === 'ready'), 'ready')
+    doc.getElementById('scan').click()
+    hidden = true // hidden while the engine starts: the scan pauses after its first frame
+    doc.dispatchEvent(new win.Event('visibilitychange'))
+    await new Promise(r => setTimeout(r, 6000))
+    assertEqual(win.__studioPano.state, 'scanning')
+    hidden = false
+    doc.dispatchEvent(new win.Event('visibilitychange'))
+    assert(await until(() => win.__studioPano.state === 'picked'), 'picked')
+    assert(win.__studioPano.picked >= 3, `picked ${win.__studioPano.picked}`)
+  } finally { f.remove() }
+})

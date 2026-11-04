@@ -19,7 +19,7 @@ const STRIP_HEIGHT = 48
 
 const $ = (id) => document.getElementById(id)
 const el = {
-  errors: $('errors'), file: $('file'), clipName: $('clip-name'), clipInfo: $('clip-info'),
+  errors: $('errors'), lost: $('lost'), file: $('file'), clipName: $('clip-name'), clipInfo: $('clip-info'),
   loadingText: $('loading-text'), bar: $('bar'), scan: $('scan'),
   scanBar: $('scan-bar'), scanText: $('scan-text'), scanCancel: $('scan-cancel'), stripScan: $('strip-scan'),
   pickedText: $('picked-text'), stripPicked: $('strip-picked'), pickedNotes: $('picked-notes'),
@@ -246,6 +246,7 @@ async function onScan() {
   el.stripPicked.replaceChildren(...el.stripScan.children)
   el.pickedText.textContent = `${res.used.length} frames picked`
   setNotes(res.messages)
+  wake.release() // only the scan and the stitch hold the screen awake
   setState('picked')
 }
 
@@ -266,6 +267,7 @@ async function onStitch() {
   if (studio.state !== 'picked' || !r?.stitcher) return
   setBar(el.stitchBar, 0)
   el.stitchText.textContent = 'Starting…'
+  wake.acquire()
   setState('stitching')
   try {
     const result = await r.stitcher.finish()
@@ -315,8 +317,8 @@ syncLens()
 loadEngine()
 if (lost) {
   setBusy(false)
-  showError(el.errors, {
+  showError(el.lost, {
     title: 'Panorama lost', body: 'The panorama was lost when the app was closed.',
-    actions: [{ label: 'Dismiss', onClick: clearErrors }],
+    actions: [{ label: 'Dismiss', onClick: () => el.lost.replaceChildren() }],
   })
 }
