@@ -4,6 +4,7 @@ Two on-device computer vision web apps for iPhone, built as static pages with no
 
 - **Sightline Live** ([`live/yolo/`](live/yolo/)): YOLO11n object detection on the live camera. Switch between the Wide and Ultra Wide lenses, see a status line (objects, engine, fps), and record an annotated MP4.
 - **Sightline Studio** ([`recorded/yolo/`](recorded/yolo/)): pick a video from Photos or Files, process every frame offline, review the boxes on a scrubber, and export an annotated MP4 with the original audio.
+- **Panorama** in both apps ([`live/panorama/`](live/panorama/) and [`recorded/panorama/`](recorded/panorama/)): stitch a wide photo from a slow turn, shot live or taken from a video. Use the **YOLO | Panorama** switch at the top of each page.
 
 The launcher is [`index.html`](index.html). Offline support comes from [`sw.js`](sw.js) and the cached model.
 
@@ -25,6 +26,35 @@ Known limits:
 - The YOLO frame rate is lower than native.
 - WASM runs single-threaded, because GitHub Pages cannot send the COOP/COEP headers that multi-threaded WASM needs.
 - COCO classes only. Wallabies show up as dog or sheep, and a sideways bus may read as truck.
+
+## Panorama
+
+Both apps stitch a panorama on the phone and give you a JPEG. The first visit to a Panorama page downloads OpenCV.js 4.10 (about 10.4 MB), which is then cached for offline use.
+
+**Live** (`live/panorama/`):
+
+1. Pick a zoom if the choice appears (1×, 1.5×, 2×). It shows only where Safari exposes camera zoom, and the last choice is remembered.
+2. Tap **Start** and allow motion access when asked.
+3. Stand still and turn slowly, about one turn of the body, in one direction. The first clear turn sets the direction. Photos are taken automatically, and the strip at the bottom shows them. Warnings appear if you turn too fast or the view is blurry.
+4. Hold the phone upright for up to 12 photos, or in landscape for up to 7. Live stops by itself at the limit, because a panorama is limited to about 340°. Rotating the phone mid-capture shows "Keep the phone the same way up" and skips frames until you turn it back.
+5. Tap **Done**, wait for the stitch, then use **Share…** or **Save file**.
+
+**Studio** (`recorded/panorama/`):
+
+1. Film a slow pan: stand still, hold the phone steady and upright, and turn on the spot at an even, slow pace. Avoid tilting up and down.
+2. Choose the clip, pick the **Lens** (Wide or Ultra Wide) that filmed it, and tap **Scan**. The app picks frames about 0.5–0.65 of a frame width apart (35–50% overlap).
+3. Tap **Stitch**, then **Share…** or **Save file**.
+
+Behaviour in both apps:
+
+- A panorama longer than about 340° keeps the first photos and says "Used the first N photos (the panorama is limited to about 340°)".
+- A scan or capture hidden mid-way pauses and resumes when you return. Navigating Back to a Panorama page reloads it.
+
+Known limits:
+
+- Ghosting for objects nearer than a few metres (parallax).
+- Moving people or cars appear doubled or faded in the overlaps.
+- No 360° wrap.
 
 ## Running locally
 
@@ -59,7 +89,7 @@ The detector uses two fixed-shape ONNX exports of YOLO11n, in [`models/`](models
 
 To regenerate them, run [`tools/export_yolo.ipynb`](tools/export_yolo.ipynb) on Google Colab, then extract the downloaded zip into the repo root. The steps, the export settings and the Ultralytics and torch versions used are in [`models/README.md`](models/README.md).
 
-Vendored libraries (ONNX Runtime Web, mp4box.js and mp4-muxer) are pinned in [`shared/vendor/VERSIONS.md`](shared/vendor/VERSIONS.md). They are never loaded from a CDN at runtime.
+Vendored libraries (ONNX Runtime Web, mp4box.js, mp4-muxer and OpenCV.js) are pinned in [`shared/vendor/VERSIONS.md`](shared/vendor/VERSIONS.md). They are never loaded from a CDN at runtime.
 
 ## Licence note
 

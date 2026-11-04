@@ -33,6 +33,31 @@ Manual checks on a real iPhone 12, run against the deployed site at `https://<us
 - [ ] Process and review a clip trimmed in the Photos app: the boxes line up with the objects during review.
 - [ ] Process and export a default HDR (HEVC) iPhone clip: the colours in the export look reasonable.
 
+## Panorama
+
+The first visit to each Panorama page downloads OpenCV.js (about 10.4 MB), so allow a moment on the first run. The spec's checks are in [section 7](superpowers/specs/2026-11-04-panorama-design.md#7-testing).
+
+Live (`live/panorama/`):
+
+- [ ] **Start** shows the motion permission prompt. Denying it shows "Panorama needs motion access. Reload the page and tap Allow."
+- [ ] Turning slowly takes photos automatically, and the strip fills. Turning too fast or a blurry view shows a warning.
+- [ ] A 5–8 photo outdoor panorama stitches with no visible seams.
+- [ ] **Zoom** (1×, 1.5×, 2×) is shown only if Safari exposes camera zoom, and hidden otherwise. A 2× panorama works, and the choice is remembered on the next visit.
+- [ ] Holding the phone upright, the capture stops at 12 photos. Note the time and whether memory holds at 12 photos.
+- [ ] Holding the phone in landscape, the capture stops at 7 photos.
+- [ ] Rotating the phone mid-capture shows "Keep the phone the same way up" and skips frames until it is turned back.
+- [ ] **Share…** and **Save file** work with the JPEG.
+- [ ] Navigating Panorama → YOLO → Back works, and the Panorama page reloads cleanly.
+
+Studio (`recorded/panorama/`):
+
+- [ ] A slow-pan clip filmed on the phone: choose it, pick the Lens, tap **Scan**, then **Stitch**. The result looks right.
+- [ ] Switching apps mid-scan, then returning, finishes the scan.
+- [ ] **Share…** and **Save file** work with the JPEG.
+- [ ] Navigating Panorama → YOLO → Back works.
+
+Known limits to look for (not bugs): ghosting for objects nearer than a few metres, moving people or cars doubled or faded in overlaps, and no 360° wrap (over about 340° the app says "Used the first N photos").
+
 ## Tests
 
 Run these in Safari on the iPhone. Keep the browser tab visible while they run, because the encoder tests need rendering.
@@ -45,4 +70,5 @@ Run these in Safari on the iPhone. Keep the browser tab visible while they run, 
 
 - [ ] Open each app once, and wait until the model has finished loading (the loading message goes away and detection runs). Then turn on airplane mode. Both apps still open and run. The app shell and the model are cached separately, so both steps are needed.
 - [ ] Run the offline check from the installed home-screen icons, not from Safari: iOS keeps the storage of home-screen apps separate from Safari's, so a cache filled in Safari does not help them.
+- [ ] Open each Panorama page once and wait for the engine to load (the download message goes away), then go offline from the installed home-screen icons. Both Panorama pages still open and stitch.
 - [ ] In Studio, run Process once at each input size you'll use offline before going offline. Each input size is a separate model download.
