@@ -214,6 +214,27 @@ export function waveCorrect(Rs) {
   return Rs.map((R) => mul(C, R))
 }
 
+// Recentres the panorama's yaw so its middle sits at yaw 0. Photo 0 is pinned at yaw 0, so a wide sweep would
+// otherwise cross the atan2 wrap at +-180 degrees in cylProject. Yaws are unwrapped along the chain (each step
+// taken in (-180, 180]), then every R is premultiplied by rotY(-mid), mid being the mean of the first and last
+// unwrapped yaws; roll and pitch are left as they were. Run it after waveCorrect and before cylBounds/cylProject.
+export function recentre(Rs) {
+  if (Rs.length === 0) return []
+  const first = yawPitchRoll(Rs[0]).yaw
+  let last = first
+  let prev = first
+  for (let i = 1; i < Rs.length; i++) {
+    const yaw = yawPitchRoll(Rs[i]).yaw
+    let step = yaw - prev
+    if (step > 180) step -= 360
+    else if (step <= -180) step += 360
+    last += step
+    prev = yaw
+  }
+  const C = rotY(-(first + last) / 2)
+  return Rs.map((R) => mul(C, R))
+}
+
 // Focal length in pixels from pairwise homographies (each maps image i to image j, in pixel coordinates).
 // Port of OpenCV focalsFromHomography (modules/stitching/src/autocalib.cpp), which expects centred coordinates,
 // so each H is first moved to the image centre: Hc = T^-1 H T with T translating by (width/2, height/2).

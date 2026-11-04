@@ -2,7 +2,7 @@ import { test, assert, assertEqual, assertClose } from './harness.js'
 import { LENS_HFOV, focalPx, displayedHfov } from '../core/stitch/camera-model.js'
 import {
   rotX, rotY, rotZ, mul, transpose, apply, intrinsics, nearestRotation, rotationFromHomography,
-  yawPitchRoll, chain, waveCorrect, focalFromHomographies, cylProject, cylToImage, cylBounds,
+  yawPitchRoll, chain, waveCorrect, recentre, focalFromHomographies, cylProject, cylToImage, cylBounds,
   outputScale, cropRect,
 } from '../core/stitch/geometry.js'
 
@@ -121,7 +121,7 @@ test('geometry: waveCorrect levels a tilted chain', () => {
   const upsideDown = waveCorrect([0, 20, 40].map((yaw) => mul(rotZ(180), rotY(yaw))))
   for (const R of upsideDown) {
     const a = yawPitchRoll(R)
-    assert(Math.abs(a.roll) < 0.05 || Math.abs(Math.abs(a.roll) - 180) < 0.05, `roll ${a.roll}`)
+    assert(Math.abs(a.roll) < 0.05, `roll ${a.roll}`)
   }
 })
 
@@ -183,4 +183,22 @@ test('geometry: cropRect trims ragged edges', () => {
   assertEqual(cropRect(Float32Array.from([5, 6]), Float32Array.from([1, 2])), { x: 0, y: 0, width: 0, height: 0 })
   // An invalid column between valid ones leaves no usable rectangle.
   assertEqual(cropRect(Float32Array.from([0, NEVER, 0]), Float32Array.from([50, -1, 50])), { x: 0, y: 0, width: 0, height: 0 })
+})
+
+test('geometry: recentre keeps a 200 degree sweep unwrapped', () => {
+  // rotY(200) is the same rotation as rotY(-160): without recentring, cylProject wraps at 180 from photo 0.
+  const Rs = [0, 50, 100, 150, 200].map(rotY)
+  const centred = recentre(Rs)
+  const yaws = centred.map((R) => yawPitchRoll(R).yaw)
+  ;[-100, -50, 0, 50, 100].forEach((want, i) => assertClose(yaws[i], want, 1e-9))
+  const b = cylBounds(centred, 500, 640, 360)
+  const want = 500 * (200 * DEG + 2 * Math.atan(320 / 500))
+  assert(Math.abs((b.uMax - b.uMin) / want - 1) < 0.01, `u span ${b.uMax - b.uMin}, want ${want}`)
+  assertEqual(recentre([]), [])
+  // Pitch and roll survive the recentring.
+  const tilted = [0, 60, 120, 180].map((yaw) => mul(rotY(yaw), mul(rotX(5), rotZ(2))))
+  const t = recentre(tilted).map(yawPitchRoll)
+  assertClose(t[0].pitch, yawPitchRoll(tilted[0]).pitch, 1e-9)
+  assertClose(t[3].roll, 2, 1e-9)
+  assertClose(t[0].yaw + t[3].yaw, 0, 1e-9)
 })
