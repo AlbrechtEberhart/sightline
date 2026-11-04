@@ -67,6 +67,7 @@ export class Stitcher {
   }
 
   #message(data) {
+    if (this.#closed) return // e.g. progress already queued when cancel() terminated the worker
     if (data.type === 'progress') {
       this.#onProgress?.(data.stage, data.done, data.total)
     } else if (data.type === 'result') {
