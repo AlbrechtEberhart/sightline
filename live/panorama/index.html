@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sightline Live">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="icon" href="../icons/icon-180.png" type="image/png">
+<title>Sightline Live · Panorama</title>
+<link rel="stylesheet" href="../../shared/ui.css">
+<style>
+  /* Full-screen camera with the controls floating over it (same layout as the YOLO page). */
+  body { overflow: hidden; }
+  .app.live { display: block; position: relative; padding: 0; }
+  .live .viewport { position: absolute; inset: 0; display: block; border-radius: 0; }
+  .live .viewport video {
+    position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover;
+  }
+  .live .topbar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding: 10px 12px;
+    background: linear-gradient(rgba(11,18,32,.75), rgba(11,18,32,0));
+  }
+  .live .topbar .choices { display: inline-flex; gap: 6px; }
+  .live .topbar [hidden], .live .controls [hidden] { display: none; }
+  .live .readout {
+    position: absolute; left: 12px; right: 12px; bottom: 150px; z-index: 3;
+    display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+  }
+  .live .readout .status, .live .readout .warning {
+    align-self: flex-start; padding: 3px 8px; border-radius: 8px; background: rgba(11,18,32,.7);
+  }
+  .live .readout .warning { color: var(--danger); font-size: 14px; font-weight: 600; }
+  .live .strip {
+    position: absolute; left: 0; right: 0; bottom: 92px; z-index: 3; height: 52px; padding: 0 12px;
+    display: flex; gap: 6px; overflow-x: auto; align-items: center;
+  }
+  .live .strip canvas { height: 48px; border-radius: 6px; border: 1px solid var(--accent); flex: none; }
+  .live .controls {
+    position: absolute; left: 0; right: 0; bottom: 34px; z-index: 3; padding: 0 12px;
+    display: flex; gap: 10px; justify-content: center;
+  }
+  .live .controls .pill { min-height: 48px; padding: 8px 24px; font-size: 16px; }
+  .live .footer-disclaimer {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 8px;
+    background: linear-gradient(rgba(11,18,32,0), rgba(11,18,32,.8));
+  }
+  .live .overlay { position: absolute; inset: 0; z-index: 4; display: grid; align-content: center; pointer-events: none; }
+  .live .overlay > * { pointer-events: auto; }
+  .live .loading { margin: 0 24px; text-align: center; color: var(--muted); }
+  .live .loading .progress { margin-top: 8px; }
+  .live .result {
+    position: absolute; inset: 0; z-index: 5; background: var(--bg); display: flex; flex-direction: column;
+    gap: 10px; padding: calc(60px + var(--sat)) 12px calc(40px + var(--sab));
+  }
+  .live .result[hidden] { display: none; }
+  .live .result .scroll { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+  .live .result img { height: 100%; width: auto; max-width: none; display: block; }
+  .live .result .notes { margin: 0; color: var(--muted); font-size: 13px; }
+  .live .result .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="app live">
+  <div class="topbar">
+    <h1>Sightline Live</h1>
+    <nav class="tool-switch"><a href="../yolo/">YOLO</a><a href="../panorama/" aria-current="page">Panorama</a></nav>
+    <span id="zoom" class="choices" role="group" aria-label="Zoom" hidden></span>
+  </div>
+
+  <div id="viewport" class="viewport"></div>
+
+  <div class="readout">
+    <div id="status" class="status" aria-live="polite">Starting…</div>
+    <div id="warning" class="warning" aria-live="assertive" hidden></div>
+  </div>
+  <div id="strip" class="strip" hidden></div>
+  <div class="controls">
+    <button id="start" class="pill active" type="button" disabled>Start</button>
+    <button id="done" class="pill active" type="button" hidden>Done</button>
+    <button id="cancel" class="pill" type="button" hidden>Cancel</button>
+  </div>
+
+  <div class="overlay">
+    <div id="loading" class="loading" hidden>
+      <div id="loading-text">Loading…</div>
+      <div class="progress"><div id="bar" class="bar"></div></div>
+    </div>
+    <div id="errors"></div>
+  </div>
+
+  <div id="result" class="result" hidden>
+    <div class="scroll"><img id="pano-img" alt="Stitched panorama"></div>
+    <p id="notes" class="notes" hidden></p>
+    <div class="row">
+      <button id="share" class="pill active" type="button" hidden>Share…</button>
+      <a id="save-file" class="pill" hidden>Save file</a>
+      <button id="new" class="pill" type="button">New panorama</button>
+    </div>
+  </div>
+
+  <div class="footer-disclaimer">RESEARCH DEMO · NOT A DRIVING AID</div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

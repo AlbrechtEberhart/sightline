@@ -22,3 +22,13 @@ test('live-yolo: recorder sizes from the first frame and stops on a size change'
     assert(blob.type === 'video/mp4' && blob.size > 0, 'clip is finished and non-empty')
   } finally { frames.forEach(f => f.close()); r.abort() }
 })
+test('live-yolo: tool switch present', async () => {
+  const f = document.createElement('iframe'); f.style.width = '390px'; f.style.height = '844px'
+  f.src = new URL('../live/yolo/?source=file&clip=../../tests/fixtures/bus-3s.mp4', import.meta.url); document.body.append(f)
+  try {
+    let nav; for (let i = 0; i < 20 && !nav; i++) { await new Promise(r => setTimeout(r, 250)); nav = f.contentDocument?.querySelector('.tool-switch') }
+    assert(nav, '.tool-switch exists')
+    assert(nav.querySelector('a[href="../yolo/"][aria-current="page"]'), 'YOLO link is current')
+    assert(nav.querySelector('a[href="../panorama/"]'), 'Panorama link')
+  } finally { f.remove() }
+})

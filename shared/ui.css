@@ -170,3 +170,24 @@ button { font: inherit; color: inherit; }
   .app > .left { border-radius: var(--radius) var(--radius) 0 0; border-bottom: 0; margin-bottom: -8px; }
   .app > .right { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* YOLO | Panorama switch shared by the tool pages. */
+.tool-switch { display: inline-flex; gap: 6px; }
+.tool-switch a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 14px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.tool-switch a[aria-current="page"] {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}

@@ -57,3 +57,8 @@ export function createCaptureRules({ hfovDeg, maxPhotos = 12 }) {
     get photosYaw() { return [...shots] },
   }
 }
+
+// Photo cap for Live so the sweep ends before the stitch worker's 340 degree limit would drop photos.
+export function maxPhotosFor(hfovDeg) {
+  return Math.min(12, 1 + Math.floor((340 - hfovDeg) / (STEP_FRACTION * hfovDeg)))
+}
