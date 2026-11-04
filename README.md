@@ -16,7 +16,7 @@ Camera settings for best results:
 - Camera → Formats → **Most Compatible** (H.264). HEVC also works in Safari.
 - Lock focus and exposure for scans.
 
-Saving: iOS only opens the share sheet from a tap. Both apps therefore show a **Save** button when the MP4 is ready. If sharing is cancelled or unavailable, a download link appears.
+Saving: when the MP4 is ready, both apps show two buttons. **Share…** opens the share sheet (Zalo, Messages, AirDrop, Save Video); iOS only opens it from a tap, and the button is hidden where the browser cannot share files. **Save file** downloads the MP4: to the Downloads folder on a PC, or to Files > Downloads on iPhone. A web page cannot send a file to Zalo directly, so Zalo is reached through the share sheet.
 
 Known limits:
 

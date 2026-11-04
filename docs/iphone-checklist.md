@@ -13,16 +13,18 @@ Manual checks on a real iPhone 12, run against the deployed site at `https://<us
 - [ ] The status line shows `WebGPU` in Safari.
 - [ ] In Brave, the status line shows `WebGPU` or `WASM`, and detection works either way.
 - [ ] Denying the camera shows the message to allow it in iOS Settings, with a Retry button.
-- [ ] A 30-second recording saves to Photos via the **Save** button. The share sheet opens and saves to Photos.
+- [ ] A 30-second recording saves to Photos via **Share… → Save Video**.
 - [ ] Rotating the phone keeps the boxes aligned with the objects.
-- [ ] Rotating the phone during a recording stops it with "Recording stopped: orientation changed", and the **Save** button still appears.
+- [ ] Rotating the phone during a recording stops it with "Recording stopped: orientation changed", and the **Share…** and **Save file** buttons still appear.
 - [ ] Return from the home screen after 30 s: the camera reopens.
 
 ## Sightline Studio
 
 - [ ] A 1-minute iPhone clip in HEVC processes, reviews and exports to Photos with audio.
 - [ ] A 1-minute iPhone clip in Most Compatible (H.264) processes, reviews and exports to Photos with audio.
-- [ ] The **Save** button opens the share sheet and saves to Photos.
+- [ ] **Share…** opens the share sheet. **Save Video** saves to Photos, and **Zalo** sends the clip (e.g. to "My Cloud" so it can be opened in Zalo PC).
+- [ ] **Save file** downloads the MP4 to Files > Downloads, both in Safari and from the Home Screen app.
+- [ ] On a PC (Chrome or Edge), Studio exports a clip and **Save file** puts it in the Downloads folder.
 - [ ] A 1080p 60 fps clip exports. This checks the H.264 level choice.
 - [ ] The exported clip keeps the source audio in sync with the picture.
 - [ ] Leaving the page during processing and returning resumes from the last processed frame.

@@ -4,7 +4,7 @@ import { listLenses, LiveCameraSource } from '../live-camera.js'
 import { createDetector } from '../../core/detect/detector.js'
 import { fetchModel, MODEL_URLS } from '../../shared/models.js'
 import { fitCover, drawDetections } from '../../shared/draw-boxes.js'
-import { saveFile } from '../../shared/save.js'
+import { createSaveControls } from '../../shared/save.js'
 import { showError, loadSettings, saveSettings } from '../../shared/ui.js'
 import { createFpsMeter, formatStatus, lowFpsHint } from './status.js'
 import { Recorder } from './recording.js'
@@ -15,8 +15,8 @@ const HINT_AFTER_MS = 2000 // let the fps meter warm up before warning
 
 const $ = (id) => document.getElementById(id)
 const el = {
-  viewport: $('viewport'), canvas: $('overlay'), lens: $('lens'), rec: $('rec'), save: $('save'),
-  download: $('download'), settingsBtn: $('settings-btn'), sheet: $('sheet'), status: $('status'),
+  viewport: $('viewport'), canvas: $('overlay'), lens: $('lens'), rec: $('rec'), share: $('share'),
+  saveFile: $('save-file'), settingsBtn: $('settings-btn'), sheet: $('sheet'), status: $('status'),
   hint: $('hint'), loading: $('loading'), loadingText: $('loading-text'), bar: $('bar'), errors: $('errors'),
   conf: $('conf'), confVal: $('conf-val'), labels: $('labels'),
 }
@@ -52,8 +52,10 @@ let stopping = false // finish() in flight: never abort this, let the clip compl
 let halted = false // a fatal error card is showing: camera or detector is not running
 let pageHidden = false
 let reopenPending = false // the camera should be reopened when the page is visible again
-let blob = null
-let linkUrl = null
+const saver = createSaveControls({
+  share: el.share, save: el.saveFile,
+  onError: (err) => fail('Could not share', `${err.message || String(err)} Use Save file instead.`, dismiss, 'Dismiss'),
+})
 
 const serial = (fn) => (chain = chain.then(fn).catch((err) => console.error(err)))
 
@@ -243,14 +245,6 @@ function drawFrame() {
 }
 
 // ---------- recording ----------
-function clearSaved() {
-  blob = null
-  if (linkUrl) URL.revokeObjectURL(linkUrl)
-  linkUrl = null
-  el.save.hidden = true
-  el.download.hidden = true
-}
-
 // Record is usable only with a live camera, no fatal error card, and no start/stop in flight.
 function updateRec() {
   el.rec.disabled = !source || halted || starting || stopping
@@ -288,15 +282,14 @@ async function recordFrame(image, boxes, t) {
   }
 }
 
-// Stops the recording normally: finish() completes and the Save pill appears.
+// Stops the recording normally: finish() completes and the Share / Save file pills appear.
 async function finishRecording(notice) {
   if (stopping || !recorder.active || starting) return
   stopping = true
   el.rec.textContent = 'Saving…'
   updateRec()
   try {
-    blob = await recorder.stop()
-    el.save.hidden = false
+    saver.offer(await recorder.stop(), `sightline-live-${new Date().toISOString().replace(/[:.]/g, '-')}.mp4`)
     if (notice) fail(notice, 'The clip recorded so far is ready to save.', dismiss, 'Dismiss')
   } catch (err) {
     fail('Recording failed', err.message || String(err), dismiss, 'Dismiss')
@@ -307,27 +300,12 @@ async function finishRecording(notice) {
 function toggleRecording() {
   if (stopping || starting || halted || !source) return
   if (recorder.active) return finishRecording()
-  clearSaved()
+  saver.clear()
   // The encoder is created from the first recorded frame's size (see Recorder).
   recorder.arm(source.meta.fps)
   starting = true
   el.rec.textContent = 'Starting…'
   updateRec()
-}
-
-// Direct click handler: saveFile needs the user gesture, so nothing is awaited before it.
-function onSave() {
-  if (!blob) return
-  const saved = blob
-  const filename = `sightline-live-${new Date().toISOString().replace(/[:.]/g, '-')}.mp4`
-  saveFile(saved, filename).then((result) => {
-    if (result === 'shared') return
-    if (linkUrl) URL.revokeObjectURL(linkUrl)
-    linkUrl = URL.createObjectURL(saved)
-    el.download.href = linkUrl
-    el.download.download = filename
-    el.download.hidden = false
-  }).catch((err) => fail('Could not save', err.message || String(err), dismiss, 'Dismiss'))
 }
 
 // ---------- settings ----------
@@ -376,7 +354,6 @@ el.lens.addEventListener('change', () => serial(async () => {
   await openCamera()
 }))
 el.rec.addEventListener('click', toggleRecording)
-el.save.addEventListener('click', onSave)
 
 // ---------- lifecycle ----------
 document.addEventListener('visibilitychange', () => {

@@ -8,7 +8,7 @@ import { createReview } from './review.js'
 import { createWakeLock } from './wake-lock.js'
 import { createDetector } from '../../core/detect/detector.js'
 import { fetchModel, MODEL_URLS } from '../../shared/models.js'
-import { saveFile } from '../../shared/save.js'
+import { createSaveControls } from '../../shared/save.js'
 import { showError, formatEta, loadSettings, saveSettings } from '../../shared/ui.js'
 
 const SETTINGS_KEY = 'recorded-yolo-settings'
@@ -21,7 +21,7 @@ const el = {
   conf: $('conf'), confVal: $('conf-val'), labels: $('labels'), process: $('process'),
   procBar: $('proc-bar'), procText: $('proc-text'), procCancel: $('proc-cancel'),
   summary: $('summary'), exportBtn: $('export'), expCancel: $('exp-cancel'), expProgress: $('export-progress'),
-  expBar: $('exp-bar'), expText: $('exp-text'), save: $('save'), download: $('download'), back: $('back'),
+  expBar: $('exp-bar'), expText: $('exp-text'), share: $('share'), saveFile: $('save-file'), back: $('back'),
   video: $('video'), overlay: $('overlay'),
   panels: { choose: $('panel-choose'), settings: $('panel-settings'), processing: $('panel-processing'), review: $('panel-review') },
 }
@@ -40,6 +40,14 @@ const settings = validSettings(loadSettings(SETTINGS_KEY, DEFAULTS))
 const studio = window.__studio = { state: 'choose' }
 const review = createReview(el.video, el.overlay)
 const wake = createWakeLock()
+const saver = createSaveControls({
+  share: el.share, save: el.saveFile,
+  onError: (err) => {
+    console.error(err)
+    showError(el.errors, { title: 'Could not share', body: `${message(err)} Use Save file instead.`,
+      actions: [{ label: 'Dismiss', onClick: clearErrors }] })
+  },
+})
 
 let file = null // the chosen File
 let source = null // FileVideoSource of `file`, reused for every processing run
@@ -51,8 +59,6 @@ let procEpoch = 0 // bumped by Cancel / a new clip: a stale processing run disca
 let run = null // the processClip call in flight: { ac, paused }
 let pendingResume = null // a run paused because the page was hidden: resume when visible
 let exportRun = null // { ac, cancelled, hidden }
-let blob = null
-let linkUrl = null
 let chain = Promise.resolve()
 const serial = (fn) => (chain = chain.then(fn).catch((err) => unknownFail(err)))
 
@@ -66,8 +72,7 @@ function setState(state) {
   el.exportBtn.hidden = exporting
   el.exportBtn.textContent = state === 'done' ? 'Export again' : 'Export MP4'
   el.expCancel.hidden = !exporting
-  el.save.hidden = state !== 'done' || !blob
-  if (state !== 'done') el.download.hidden = true
+  if (state !== 'done') saver.clear() // a finished export is offered only while its 'done' state lasts
   el.back.disabled = exporting
   for (const b of document.querySelectorAll('.choose-another')) b.disabled = exporting
   if (state === 'review' || state === 'done' || state === 'exporting') {
@@ -114,7 +119,7 @@ function stopWork() {
 function resetClip() {
   stopWork()
   clearErrors()
-  clearSaved()
+  saver.clear()
   review.clear()
   reviewing = null
   source?.stop()
@@ -258,14 +263,6 @@ function renderSummary() {
 }
 
 // ---------- export ----------
-function clearSaved() {
-  blob = null
-  if (linkUrl) URL.revokeObjectURL(linkUrl)
-  linkUrl = null
-  el.save.hidden = true
-  el.download.hidden = true
-}
-
 const exportName = () => `${(file?.name || 'clip').replace(/\.[^.]*$/, '') || 'clip'}-yolo.mp4`
 
 async function exportRunFn() {
@@ -277,7 +274,7 @@ async function exportRunFn() {
     return
   }
   clearErrors()
-  clearSaved()
+  saver.clear()
   const current = exportRun = { ac: new AbortController(), cancelled: false, hidden: false }
   setBar(el.expBar, 0)
   el.expText.textContent = 'Exporting… 0%'
@@ -293,7 +290,7 @@ async function exportRunFn() {
       },
     })
     if (exportRun !== current) return
-    blob = out
+    saver.offer(out, exportName())
     setState('done')
   } catch (err) {
     if (current.cancelled) { if (studio.state === 'exporting') setState('review'); return }
@@ -314,24 +311,6 @@ async function exportRunFn() {
     if (exportRun === current) exportRun = null
     wake.release()
   }
-}
-
-// Direct click handler: saveFile needs the user gesture, so nothing is awaited before it.
-function onSave() {
-  if (!blob) return
-  const saved = blob
-  const filename = exportName()
-  saveFile(saved, filename).then((outcome) => {
-    if (outcome === 'shared') return
-    if (linkUrl) URL.revokeObjectURL(linkUrl)
-    linkUrl = URL.createObjectURL(saved)
-    el.download.href = linkUrl
-    el.download.download = filename
-    el.download.hidden = false
-  }).catch((err) => {
-    console.error(err)
-    showError(el.errors, { title: 'Could not save', body: message(err), actions: [{ label: 'Dismiss', onClick: clearErrors }] })
-  })
 }
 
 // ---------- settings ----------
@@ -364,7 +343,6 @@ el.process.addEventListener('click', () => { if (source) serial(() => processRun
 el.procCancel.addEventListener('click', cancelProcessing)
 el.exportBtn.addEventListener('click', () => serial(exportRunFn))
 el.expCancel.addEventListener('click', () => { if (exportRun) { exportRun.cancelled = true; exportRun.ac.abort() } })
-el.save.addEventListener('click', onSave)
 el.back.addEventListener('click', () => setState('settings'))
 for (const b of document.querySelectorAll('.choose-another')) b.addEventListener('click', chooseAnother)
 

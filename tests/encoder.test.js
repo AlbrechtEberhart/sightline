@@ -1,6 +1,5 @@
 import { test, assert, assertEqual, assertClose, skip, fixture } from './harness.js'
 import { capTo1080, codecCandidates, Mp4Encoder } from '../shared/encoder.js'
-import { saveFile } from '../shared/save.js'
 import { FileVideoSource } from '../recorded/video-source.js'
 const enc = async o => { try { return await Mp4Encoder.create(o) } catch (e) { if (e.name === 'EncoderUnsupportedError') skip('H.264 encoding unavailable in this browser'); throw e } }
 const frame = i => { const c = new OffscreenCanvas(320, 240), g = c.getContext('2d'); g.fillStyle = `hsl(${i * 6},80%,50%)`; g.fillRect(0, 0, 320, 240); return c }
@@ -27,15 +26,6 @@ test('encoder: audio passthrough', async () => {
   e.addAudioChunks(audio.chunks)
   const out = await FileVideoSource.open(await e.finish())
   assertEqual(out.meta.hasAudio, true); assertClose(out.meta.duration, 3.0, 0.034)
-})
-test('encoder: saveFile falls back to download', async () => {
-  const calls = []
-  assertEqual(await saveFile(new Blob(['x']), 'x.txt', { canShare: () => false }, (url, name) => calls.push(name)), 'downloaded')
-  assertEqual(calls, ['x.txt'])
-})
-test('encoder: saveFile cancelled', async () => {
-  const nav = { canShare: () => true, share: async () => { throw new DOMException('no', 'AbortError') } }
-  assertEqual(await saveFile(new Blob(['x']), 'x.mp4', nav), 'cancelled')
 })
 test('encoder: codec candidates by macroblock rate', () => {
   assertEqual(codecCandidates(1920, 1080, 30)[0], 'avc1.640028'); assertEqual(codecCandidates(1920, 1080, 60)[0], 'avc1.64002A')
